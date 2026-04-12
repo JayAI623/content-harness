@@ -1,0 +1,5 @@
+{
+  "text": "{\"understood\": true, \"engagement_likelihood\": 0.78, \"ai_smell_score\": 0.22, \"depth_score\": 0.68, \"comments\": \"Gets the point fast. Tweet 4 could be tighter but the hook works for me.\"}",
+  "cost": { "input_tokens": 400, "output_tokens": 80, "usd": 0.002 },
+  "stop_reason": "end_turn"
+}

@@ -1,0 +1,5 @@
+{
+  "text": "{\"understood\": true, \"engagement_likelihood\": 0.82, \"ai_smell_score\": 0.18, \"depth_score\": 0.76, \"comments\": \"Concrete numbers, clear failure mode. I would retweet.\"}",
+  "cost": { "input_tokens": 400, "output_tokens": 80, "usd": 0.002 },
+  "stop_reason": "end_turn"
+}
