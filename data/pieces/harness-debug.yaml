@@ -1,0 +1,27 @@
+id: harness-debug-piece-001
+campaign_id: q2-infra-insights
+persona_id: ai-infra-engineer-liu
+input:
+  raw_materials:
+    - id: rm-1
+      kind: note
+      origin: inline
+      content: |
+        Bug: agent loop silently dropped tasks for 5 days. Root cause:
+        handlers returned partial state deltas. Merging dropped the rest.
+    - id: rm-2
+      kind: note
+      origin: inline
+      content: |
+        Adjacent bug: budget.charge() was called after the check, so every
+        run overshot by one call. Off-by-one on the wrong side.
+    - id: rm-3
+      kind: note
+      origin: inline
+      content: |
+        Fix: made patches append-only. Moved charge ahead of check. 40 lines.
+        Finding it took 5 days of log hunting.
+  intent: explain what debugging the harness loop taught me about observability
+state: draft
+platform_variants: []
+eval_history: []

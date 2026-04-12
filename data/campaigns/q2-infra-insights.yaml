@@ -1,0 +1,15 @@
+id: q2-infra-insights
+persona_id: ai-infra-engineer-liu
+goal: Ship Q2 insights — four pieces focused on what we learned building the harness
+timeline:
+  start: 2026-04-01T00:00:00Z
+  end: 2026-06-30T23:59:59Z
+key_messages:
+  - observability is the whole game in agent systems
+  - budgets exist for a reason — honor them or lose the loop
+  - evals that do not mirror real users lie
+content_mix:
+  thread: 5
+  article: 1
+overrides: {}
+success_criteria: 500 real engagements across the four pieces, >=2 practitioner replies each
