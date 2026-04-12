@@ -1,0 +1,5 @@
+{
+  "text": "1/ We had an agent loop silently dropping tasks for 5 days. Not crashing — skipping. Here's what we learned.\n\n2/ The model was fine. The state machine was broken. Partial deltas ate our state. Lesson: append-only patches only.\n\n3/ Budget check has to be *after* charge, not before. Otherwise every run overshoots by one call. 40-line fix, 5-day hunt.\n\n4/ Retries without attribution multiply invisibly. Tag every retry with a reason code. If you can't ask 'why are we retrying?', you're flying blind.\n\n5/ The whole fix was 40 lines. Finding it was the job. Observability is the whole game — budget every loop, log every delta, name every retry.",
+  "cost": { "input_tokens": 1100, "output_tokens": 240, "usd": 0.034 },
+  "stop_reason": "end_turn"
+}
