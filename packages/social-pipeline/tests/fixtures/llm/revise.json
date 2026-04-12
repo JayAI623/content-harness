@@ -1,0 +1,5 @@
+{
+  "text": "1/ 5 days. 40 lines. One silent state bug in an agent loop. Here's what debugging it taught me.\n\n2/ Symptom: tasks disappearing from the queue. No error, no log, just gone. Model was innocent — the state machine ate them.\n\n3/ Root cause: handlers returned partial state deltas. Anything not in the delta got dropped on merge. Fix: append-only patches, no object replacements.\n\n4/ Adjacent bug: budget check happened before charge, so every run overshot by exactly one call. Off-by-one is cheap to write, expensive to catch.\n\n5/ Real lesson: the interesting work in agent systems is never the model. It's the plumbing. Budget every loop. Log every delta. Tag every retry with a reason code.",
+  "cost": { "input_tokens": 1600, "output_tokens": 250, "usd": 0.042 },
+  "stop_reason": "end_turn"
+}
