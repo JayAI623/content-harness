@@ -1,0 +1,17 @@
+node_modules/
+dist/
+*.tsbuildinfo
+.DS_Store
+
+# runtime state — never commit
+runs/
+data/asset-pools/*/
+!data/asset-pools/.gitkeep
+
+# logs
+logs/
+*.log
+
+# editor
+.vscode/
+.idea/
