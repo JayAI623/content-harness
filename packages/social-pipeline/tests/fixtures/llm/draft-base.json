@@ -1,0 +1,5 @@
+{
+  "text": "# What I learned debugging the harness loop\n\nThree weeks ago our agent loop was dropping tasks. Not crashing — just silently skipping. The culprit wasn't the model. It was the state machine.\n\nHere's what I learned:\n\n1. Every task delta has to be append-only. If the handler returns a partial state, you'll lose the rest.\n2. Budget has to be checked after charge, not before. Otherwise you overshoot by one call.\n3. Retries without attribution multiply invisibly. Tag every retry with a reason code.\n\nThe fix took 40 lines. Finding it took five days of staring at logs. Observability is the whole game.",
+  "cost": { "input_tokens": 900, "output_tokens": 180, "usd": 0.028 },
+  "stop_reason": "end_turn"
+}
