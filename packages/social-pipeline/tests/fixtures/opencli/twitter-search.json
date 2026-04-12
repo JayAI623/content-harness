@@ -1,0 +1,23 @@
+[
+  {
+    "id": "1800000000000000001",
+    "author": "eugeneyan",
+    "url": "https://twitter.com/eugeneyan/status/1800000000000000001",
+    "content": "Building an eval harness taught me: the interesting part is never the model. It's the state machine around it. Here's what we shipped after 6 weeks.",
+    "engagement": { "likes": 842, "retweets": 120, "replies": 44, "views": 31000 }
+  },
+  {
+    "id": "1800000000000000002",
+    "author": "simonw",
+    "url": "https://twitter.com/simonw/status/1800000000000000002",
+    "content": "Three lessons from running agents in production: 1) budget every loop, 2) persist state between every step, 3) evals lie unless they mirror real users.",
+    "engagement": { "likes": 1240, "retweets": 210, "replies": 67, "views": 48000 }
+  },
+  {
+    "id": "1800000000000000003",
+    "author": "hwchase17",
+    "url": "https://twitter.com/hwchase17/status/1800000000000000003",
+    "content": "Why do agent loops stall? Usually not the model. Usually a silent state bug or an uncharged retry. Instrument everything.",
+    "engagement": { "likes": 503, "retweets": 71, "replies": 18, "views": 17200 }
+  }
+]
