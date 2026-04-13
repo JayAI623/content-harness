@@ -6,18 +6,19 @@ import type {
   Verdict,
   WorkPlan,
 } from "@content-harness/core";
+import { z } from "zod";
 import { makeResearchRefsHandler } from "./handlers/research_refs.js";
 import { draftBaseHandler } from "./handlers/draft_base.js";
 import { refineVariantHandler } from "./handlers/refine_variant.js";
 import { evalVariantHandler } from "./handlers/eval_variant.js";
 import { reviseHandler } from "./handlers/revise.js";
 import type { OpencliClient } from "./opencli-client.js";
-import type {
-  Persona,
-  Campaign,
-  Piece,
-  PlatformVariant,
-  SocialAssetRef,
+import {
+  PersonaSchema,
+  CampaignSchema,
+  PieceSchema,
+  type PlatformVariant,
+  type SocialAssetRef,
 } from "./schemas/index.js";
 import { initSocialState, type SocialState } from "./state.js";
 
@@ -256,8 +257,14 @@ export function makeSocialDomain(deps: SocialDomainDeps): HarnessDomain<SocialTa
     },
 
     initState(input: unknown): SocialState {
-      const { persona, campaign, piece } = input as { persona: Persona; campaign: Campaign; piece: Piece };
-      return initSocialState({ persona, campaign, piece });
+      const parsed = z
+        .object({
+          persona: PersonaSchema,
+          campaign: CampaignSchema,
+          piece: PieceSchema,
+        })
+        .parse(input);
+      return initSocialState(parsed);
     },
 
     serializeState(state: SocialState): object {
