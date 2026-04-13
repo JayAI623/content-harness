@@ -72,7 +72,17 @@ export async function run<TK extends string, S>(
       }
     }
 
-    const delta = await runWithRetry(domain.handlers[task.kind], task, state, infra, config.retry);
+    const handler = domain.handlers[task.kind];
+    if (!handler) {
+      return {
+        ok: false,
+        state,
+        budget: budget.snapshot(),
+        reason: `no handler for task kind "${task.kind}"`,
+        run_dir: runDir,
+      };
+    }
+    const delta = await runWithRetry(handler, task, state, infra, config.retry);
 
     state = applyDelta(state, delta);
     budget.charge(delta.cost);

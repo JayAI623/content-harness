@@ -490,6 +490,37 @@ describe("run loop", () => {
     ).rejects.toThrow(/unhandled verdict kind/);
   });
 
+  it("aborts cleanly when a task kind has no registered handler", async () => {
+    const domain: HarnessDomain<"inc", CountState> = {
+      async planInitial() {
+        return makePlan([
+          {
+            id: "t-ghost",
+            kind: "not_a_real_kind" as any,
+            params: {},
+            deps: [],
+            input_refs: [],
+            acceptance_criteria: "",
+            gate_before: false,
+            gate_after: false,
+            status: "pending",
+          },
+        ]);
+      },
+      async replan() { throw new Error("should not replan"); },
+      handlers: {} as any,
+      async evaluate(): Promise<Verdict> { return { kind: "continue" }; },
+      isDone: () => false,
+      initState: () => ({ count: 0, doneAfter: 999 }),
+      serializeState: (s) => s,
+      deserializeState: (o) => o as CountState,
+    };
+
+    const result = await run(domain, {}, makeConfig(), makeInfra(), "test-domain");
+    expect(result.ok).toBe(false);
+    expect(result.reason).toMatch(/no handler for task kind "not_a_real_kind"/);
+  });
+
   it("does NOT emit pre_publish on non-success exit (budget exhausted)", async () => {
     const domain = countDomain({ tasksToRun: 5 });
     const guard: GateResolver = async (e) => {
