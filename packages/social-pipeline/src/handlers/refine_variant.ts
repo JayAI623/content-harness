@@ -1,4 +1,5 @@
 import type { Delta, InfraBundle, Task, TaskHandler } from "@content-harness/core";
+import { buildPersonaSystemBlock } from "../prompts/persona.js";
 import type { PlatformVariant } from "../schemas/index.js";
 import type { SocialState } from "../state.js";
 
@@ -43,10 +44,7 @@ export const refineVariantHandler: TaskHandler<SocialState> = async (
   const variantIdx = state.piece.platform_variants.filter((v) => v.platform === platform).length;
 
   const staticSystem = [
-    `You are ghostwriting for ${persona.identity.name} on ${platform}.`,
-    `Voice: tone=${persona.voice.tone}. POV=${persona.voice.point_of_view}.`,
-    `Prefer words: ${persona.voice.vocabulary.prefer.join(", ") || "(none)"}`,
-    `Avoid words: ${persona.voice.vocabulary.avoid.join(", ") || "(none)"}`,
+    buildPersonaSystemBlock(persona, { platform }),
     `Example phrases: ${persona.voice.example_phrases.join(" / ")}`,
     `Red lines: ${persona.success_metrics.red_lines.join("; ") || "(none)"}`,
   ].join("\n");

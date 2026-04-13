@@ -1,4 +1,5 @@
 import type { Delta, InfraBundle, Task, TaskHandler } from "@content-harness/core";
+import { buildPersonaSystemBlock } from "../prompts/persona.js";
 import type { SocialState } from "../state.js";
 
 export const draftBaseHandler: TaskHandler<SocialState> = async (
@@ -10,11 +11,8 @@ export const draftBaseHandler: TaskHandler<SocialState> = async (
   const piece = state.piece;
 
   const staticSystem = [
-    `You are ghostwriting for ${persona.identity.name}.`,
+    buildPersonaSystemBlock(persona),
     `Bio: ${persona.identity.long_bio}`,
-    `Voice: tone=${persona.voice.tone}. POV=${persona.voice.point_of_view}.`,
-    `prefer words: ${persona.voice.vocabulary.prefer.join(", ") || "(none)"}`,
-    `avoid words: ${persona.voice.vocabulary.avoid.join(", ") || "(none)"}`,
     `Example phrases: ${persona.voice.example_phrases.join(" / ")}`,
     `Primary topics: ${persona.domain.primary_topics.join(", ")}`,
     `Audience: ${persona.audience.description}`,
