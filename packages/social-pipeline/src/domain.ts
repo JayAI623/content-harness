@@ -208,11 +208,11 @@ export function makeSocialDomain(deps: SocialDomainDeps): HarnessDomain<SocialTa
   const ids = makeIdGen();
 
   return {
-    async planInitial(ctx: PlanContext<SocialState>): Promise<WorkPlan<SocialTaskKind>> {
+    async planInitial(ctx: PlanContext<SocialTaskKind, SocialState>): Promise<WorkPlan<SocialTaskKind>> {
       return buildInitialPlan(ctx.state, ids);
     },
 
-    async replan(ctx: PlanContext<SocialState>, _reason: string): Promise<WorkPlan<SocialTaskKind>> {
+    async replan(ctx: PlanContext<SocialTaskKind, SocialState>, _reason: string): Promise<WorkPlan<SocialTaskKind>> {
       // If the latest variant for any platform is rejected and still has
       // revision budget, build a focused revise+eval_variant plan. Otherwise
       // fall back to a full initial plan.
@@ -225,7 +225,7 @@ export function makeSocialDomain(deps: SocialDomainDeps): HarnessDomain<SocialTa
 
     handlers,
 
-    async evaluate(ctx: PlanContext<SocialState>): Promise<Verdict> {
+    async evaluate(ctx: PlanContext<SocialTaskKind, SocialState>): Promise<Verdict> {
       const state = ctx.state;
       const maxRevisions = ctx.config.max_revisions;
       const variants = state.piece.platform_variants;

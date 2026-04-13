@@ -77,9 +77,9 @@ export interface Delta<State> {
 }
 
 // ─── Domain interface ────────────────────────────────────────────
-export interface PlanContext<State> {
+export interface PlanContext<TK extends string, State> {
   state: State;
-  config: RunConfig;
+  config: RunConfig<TK, State>;
 }
 
 export interface TaskHandler<State> {
@@ -87,10 +87,10 @@ export interface TaskHandler<State> {
 }
 
 export interface HarnessDomain<TaskKind extends string, State> {
-  planInitial(ctx: PlanContext<State>): Promise<WorkPlan<TaskKind>>;
-  replan(ctx: PlanContext<State>, reason: string): Promise<WorkPlan<TaskKind>>;
+  planInitial(ctx: PlanContext<TaskKind, State>): Promise<WorkPlan<TaskKind>>;
+  replan(ctx: PlanContext<TaskKind, State>, reason: string): Promise<WorkPlan<TaskKind>>;
   handlers: Record<TaskKind, TaskHandler<State>>;
-  evaluate(ctx: PlanContext<State>): Promise<Verdict>;
+  evaluate(ctx: PlanContext<TaskKind, State>): Promise<Verdict>;
   isDone(state: State): boolean;
   initState(input: unknown): State;
   serializeState(state: State): object;
@@ -167,11 +167,11 @@ export type GateEvent<TK extends string, S> =
   | { kind: "task_gate_before"; task: Task<TK> }
   | { kind: "task_gate_after"; task: Task<TK>; delta: Delta<S> };
 
-export interface GateResolver {
-  <TK extends string, S>(event: GateEvent<TK, S>): Promise<GateDecision>;
+export interface GateResolver<TK extends string = string, S = unknown> {
+  (event: GateEvent<TK, S>): Promise<GateDecision>;
 }
 
-export interface RunConfig {
+export interface RunConfig<TK extends string = string, S = unknown> {
   run_id: string;
   run_root: string;
   budget: BudgetLimits;
@@ -180,7 +180,7 @@ export interface RunConfig {
     post_plan: boolean;
     pre_publish: boolean;
   };
-  gate_resolver: GateResolver;
+  gate_resolver: GateResolver<TK, S>;
   thresholds: {
     eval_pass: number;
     ai_smell_max: number;

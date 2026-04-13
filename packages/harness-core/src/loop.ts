@@ -14,7 +14,7 @@ import type {
 export async function run<TK extends string, S>(
   domain: HarnessDomain<TK, S>,
   input: unknown,
-  config: RunConfig,
+  config: RunConfig<TK, S>,
   infra: InfraBundle,
   domainId: string,
 ): Promise<RunResult<S>> {
