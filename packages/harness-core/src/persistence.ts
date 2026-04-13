@@ -1,6 +1,6 @@
 import { mkdir, writeFile, readFile, readdir, appendFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { BudgetSnapshot, Delta, Task, WorkPlan } from "./types.js";
+import type { BudgetSnapshot, Delta, Task, Verdict, WorkPlan } from "./types.js";
 
 export interface CreateRunOptions {
   run_root: string;
@@ -66,6 +66,7 @@ export async function snapshot(runDir: string, payload: SnapshotPayload): Promis
 export interface EventEntry {
   task: Task<string>;
   delta: Delta<unknown>;
+  verdict?: Verdict;
 }
 
 export async function appendEvent(runDir: string, entry: EventEntry): Promise<void> {

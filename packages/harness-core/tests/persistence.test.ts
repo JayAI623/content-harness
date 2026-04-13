@@ -9,7 +9,8 @@ import {
   loadLatestState,
   loadLatestPlan,
 } from "../src/persistence.js";
-import type { Task, WorkPlan } from "../src/types.js";
+import type { EventEntry } from "../src/persistence.js";
+import type { Task, Verdict, WorkPlan } from "../src/types.js";
 
 let runRoot: string;
 beforeEach(async () => {
@@ -89,6 +90,27 @@ describe("persistence", () => {
     expect(lines).toHaveLength(2);
     expect(JSON.parse(lines[0]!).delta.cost.input_tokens).toBe(1);
     expect(JSON.parse(lines[1]!).delta.cost.output_tokens).toBe(4);
+  });
+
+  it("appendEvent round-trips verdict field through JSON", async () => {
+    const dir = await createRun({
+      run_root: runRoot,
+      run_id: "r5",
+      domain_id: "d",
+      started_at: new Date(),
+    });
+    const verdict: Verdict = { kind: "revise", task_id: "t1", feedback: "x" };
+    const entry: EventEntry = {
+      task: fakeTask,
+      delta: { kind: "success", patches: [], cost: { input_tokens: 1, output_tokens: 2, usd: 0.001 } },
+      verdict,
+    };
+    await appendEvent(dir, entry);
+    const raw = await readFile(join(dir, "events.jsonl"), "utf8");
+    const lines = raw.trim().split("\n");
+    expect(lines).toHaveLength(1);
+    const parsed = JSON.parse(lines[0]!);
+    expect(parsed.verdict).toEqual(verdict);
   });
 
   it("loadLatestPlan returns the most recent plan snapshot", async () => {
