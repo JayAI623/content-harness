@@ -1,8 +1,9 @@
 import type { Delta, StatePatch } from "./types.js";
 
 export function applyPatch<S>(state: S, patch: StatePatch): S {
+  const value = structuredClone(patch.value);
   if (patch.path.length === 0) {
-    return patch.value as S;
+    return value as S;
   }
   const copy: any = Array.isArray(state) ? [...(state as any)] : { ...(state as any) };
   let cursor: any = copy;
@@ -14,16 +15,16 @@ export function applyPatch<S>(state: S, patch: StatePatch): S {
   const last = patch.path[patch.path.length - 1]!;
   switch (patch.op) {
     case "set":
-      cursor[last] = patch.value;
+      cursor[last] = value;
       break;
     case "append": {
       const arr = Array.isArray(cursor[last]) ? [...cursor[last]] : [];
-      arr.push(patch.value);
+      arr.push(value);
       cursor[last] = arr;
       break;
     }
     case "merge":
-      cursor[last] = { ...(cursor[last] ?? {}), ...(patch.value as object) };
+      cursor[last] = { ...(cursor[last] ?? {}), ...(value as object) };
       break;
   }
   return copy as S;
