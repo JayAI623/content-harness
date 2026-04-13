@@ -10,6 +10,7 @@ import {
   loadLatestPlan,
 } from "../src/persistence.js";
 import type { EventEntry } from "../src/persistence.js";
+import { writeAtomic } from "../src/persistence-atomic.js";
 import type { Task, Verdict, WorkPlan } from "../src/types.js";
 
 let runRoot: string;
@@ -123,5 +124,24 @@ describe("persistence", () => {
     await snapshot(dir, { state: {}, plan: fakePlan, budget: { used_tokens: 0, used_usd: 0, iterations: 0, wall_seconds: 0, exhausted: false } });
     const loaded = await loadLatestPlan<"a">(dir);
     expect(loaded?.plan_id).toBe("p1");
+  });
+});
+
+describe("writeAtomic", () => {
+  it("writes the target path and leaves no tmp file on success", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "atomic-"));
+    const target = join(dir, "f.json");
+    await writeAtomic(target, '{"hello":"world"}\n');
+    expect(await readFile(target, "utf8")).toBe('{"hello":"world"}\n');
+    const entries = await readdir(dir);
+    expect(entries).toEqual(["f.json"]);
+  });
+
+  it("overwrites an existing file atomically", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "atomic-"));
+    const target = join(dir, "f.json");
+    await writeAtomic(target, "first");
+    await writeAtomic(target, "second");
+    expect(await readFile(target, "utf8")).toBe("second");
   });
 });
