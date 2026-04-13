@@ -85,6 +85,14 @@ export function makeFilesystemAssetStore(root: string): AssetStore {
             throw err;
           }
         }
+        default: {
+          // Exhaustiveness check against SocialAssetRef: if a new variant is
+          // added without a case above, this assignment fails to compile.
+          const _exhaustive: never = sref;
+          throw new Error(
+            `asset-store: unsupported ref kind '${(sref as { kind: string }).kind}'`,
+          );
+        }
       }
     },
 

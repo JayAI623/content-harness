@@ -60,4 +60,11 @@ describe("filesystem asset store", () => {
     const bytes = await store.getBlob("liu", key);
     expect(bytes && new TextDecoder().decode(bytes)).toBe("hi");
   });
+
+  it("resolve throws on an unsupported ref kind", async () => {
+    const store = makeFilesystemAssetStore(root);
+    await expect(
+      store.resolve("liu", { kind: "totally_not_a_real_kind" } as unknown as AssetRef),
+    ).rejects.toThrow(/unsupported ref kind/);
+  });
 });
