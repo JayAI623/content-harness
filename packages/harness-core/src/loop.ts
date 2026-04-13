@@ -54,6 +54,19 @@ export async function run<TK extends string, S>(
   infra: InfraBundle,
   domainId: string,
 ): Promise<RunResult<S>> {
+  async function maybePrePublishReject(
+    state: S,
+    budget: Budget,
+    runDir: string,
+  ): Promise<RunResult<S> | null> {
+    if (!config.gates.pre_publish) return null;
+    const decision = await config.gate_resolver({ kind: "pre_publish", state });
+    if (decision === "reject") {
+      return { ok: false, state, budget: budget.snapshot(), reason: "pre_publish gate rejected", run_dir: runDir };
+    }
+    return null;
+  }
+
   let state = domain.initState(input);
   let plan: WorkPlan<TK> = await domain.planInitial({ state, config });
   const budget = new Budget(config.budget, () => infra.clock.now());
@@ -130,9 +143,12 @@ export async function run<TK extends string, S>(
       case "redirect":
         plan = await domain.replan({ state, config }, verdict.reason);
         break;
-      case "done":
+      case "done": {
         await snapshot(runDir, { state: domain.serializeState(state), plan, budget: budget.snapshot() });
+        const rejection = await maybePrePublishReject(state, budget, runDir);
+        if (rejection) return rejection;
         return { ok: true, state, budget: budget.snapshot(), run_dir: runDir };
+      }
       case "abort":
         return { ok: false, state, budget: budget.snapshot(), reason: verdict.reason, run_dir: runDir };
     }
@@ -141,5 +157,7 @@ export async function run<TK extends string, S>(
   if (budget.exhausted()) {
     return { ok: false, state, budget: budget.snapshot(), reason: `budget exhausted (${budget.snapshot().limit_hit})`, run_dir: runDir };
   }
+  const rejection = await maybePrePublishReject(state, budget, runDir);
+  if (rejection) return rejection;
   return { ok: true, state, budget: budget.snapshot(), run_dir: runDir };
 }
