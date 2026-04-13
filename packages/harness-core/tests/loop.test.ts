@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { run } from "../src/loop.js";
 import { autoApproveGateResolver, scriptedGateResolver } from "../src/gates.js";
+import type { GateResolver } from "../src/types.js";
 import { silentLogger } from "../src/infra/logger.js";
 import { systemClock } from "../src/infra/clock.js";
 import { fakeLLMClient } from "../src/infra/llm.js";
@@ -295,5 +296,179 @@ describe("run loop", () => {
     expect(handlerCalls).toBe(2);
     // second invocation observed the revise_feedback stamped on params by markRevise
     expect(observedFeedback).toContain("please retry");
+  });
+
+  it("emits pre_publish gate on done verdict (approve path)", async () => {
+    const domain = countDomain({ tasksToRun: 1 });
+    const events: string[] = [];
+    const resolver: GateResolver = async (e) => {
+      events.push(e.kind);
+      return "approve";
+    };
+    const result = await run(
+      domain,
+      { doneAfter: 1 },
+      makeConfig({ gates: { post_plan: false, pre_publish: true }, gate_resolver: resolver }),
+      makeInfra(),
+      "test-domain",
+    );
+    expect(result.ok).toBe(true);
+    expect(result.state.count).toBe(1);
+    expect(events).toContain("pre_publish");
+    // Exactly one pre_publish invocation.
+    expect(events.filter((k) => k === "pre_publish").length).toBe(1);
+  });
+
+  it("emits pre_publish gate on done verdict (reject path)", async () => {
+    const domain = countDomain({ tasksToRun: 1 });
+    const resolver = scriptedGateResolver(["reject"]);
+    const result = await run(
+      domain,
+      { doneAfter: 1 },
+      makeConfig({ gates: { post_plan: false, pre_publish: true }, gate_resolver: resolver }),
+      makeInfra(),
+      "test-domain",
+    );
+    expect(result.ok).toBe(false);
+    expect(result.reason).toMatch(/pre.?publish/i);
+  });
+
+  it("emits pre_publish gate on natural completion exit (no done verdict)", async () => {
+    // A domain where evaluate never returns {kind:"done"} but isDone flips true
+    // after the first task. On the next while-check, the loop exits and we hit
+    // the bottom `return { ok: true }` — which must also be gated.
+    const events: string[] = [];
+    const resolver: GateResolver = async (e) => {
+      events.push(e.kind);
+      return "approve";
+    };
+    const domain: HarnessDomain<"inc", CountState> = {
+      async planInitial() {
+        return makePlan([
+          {
+            id: "t0",
+            kind: "inc",
+            params: {},
+            deps: [],
+            input_refs: [],
+            acceptance_criteria: "",
+            gate_before: false,
+            gate_after: false,
+            status: "pending",
+          },
+        ]);
+      },
+      async replan() { return makePlan([]); },
+      handlers: {
+        inc: async (_task, state): Promise<Delta<CountState>> => ({
+          kind: "success",
+          patches: [{ op: "set", path: ["count"], value: state.count + 1 }],
+          cost: { input_tokens: 1, output_tokens: 1, usd: 0 },
+        }),
+      },
+      async evaluate(): Promise<Verdict> {
+        // never returns done — always "continue"
+        return { kind: "continue" };
+      },
+      isDone: (state) => state.count >= 1,
+      initState: () => ({ count: 0, doneAfter: 1 }),
+      serializeState: (s) => s,
+      deserializeState: (o) => o as CountState,
+    };
+
+    const result = await run(
+      domain,
+      {},
+      makeConfig({ gates: { post_plan: false, pre_publish: true }, gate_resolver: resolver }),
+      makeInfra(),
+      "test-domain",
+    );
+    expect(result.ok).toBe(true);
+    expect(events).toContain("pre_publish");
+    expect(events.filter((k) => k === "pre_publish").length).toBe(1);
+  });
+
+  it("natural completion pre_publish rejection returns ok:false with reason", async () => {
+    const resolver: GateResolver = async (e) => {
+      if (e.kind === "pre_publish") return "reject";
+      return "approve";
+    };
+    const domain: HarnessDomain<"inc", CountState> = {
+      async planInitial() {
+        return makePlan([
+          {
+            id: "t0",
+            kind: "inc",
+            params: {},
+            deps: [],
+            input_refs: [],
+            acceptance_criteria: "",
+            gate_before: false,
+            gate_after: false,
+            status: "pending",
+          },
+        ]);
+      },
+      async replan() { return makePlan([]); },
+      handlers: {
+        inc: async (_task, state): Promise<Delta<CountState>> => ({
+          kind: "success",
+          patches: [{ op: "set", path: ["count"], value: state.count + 1 }],
+          cost: { input_tokens: 1, output_tokens: 1, usd: 0 },
+        }),
+      },
+      async evaluate(): Promise<Verdict> { return { kind: "continue" }; },
+      isDone: (state) => state.count >= 1,
+      initState: () => ({ count: 0, doneAfter: 1 }),
+      serializeState: (s) => s,
+      deserializeState: (o) => o as CountState,
+    };
+    const result = await run(
+      domain,
+      {},
+      makeConfig({ gates: { post_plan: false, pre_publish: true }, gate_resolver: resolver }),
+      makeInfra(),
+      "test-domain",
+    );
+    expect(result.ok).toBe(false);
+    expect(result.reason).toMatch(/pre.?publish/i);
+  });
+
+  it("does NOT invoke resolver for pre_publish when gate is disabled", async () => {
+    const domain = countDomain({ tasksToRun: 2 });
+    const guard: GateResolver = async (e) => {
+      if (e.kind === "pre_publish") throw new Error("unexpected pre_publish invocation");
+      return "approve";
+    };
+    const result = await run(
+      domain,
+      { doneAfter: 2 },
+      makeConfig({ gates: { post_plan: false, pre_publish: false }, gate_resolver: guard }),
+      makeInfra(),
+      "test-domain",
+    );
+    expect(result.ok).toBe(true);
+    expect(result.state.count).toBe(2);
+  });
+
+  it("does NOT emit pre_publish on non-success exit (budget exhausted)", async () => {
+    const domain = countDomain({ tasksToRun: 5 });
+    const guard: GateResolver = async (e) => {
+      if (e.kind === "pre_publish") throw new Error("unexpected pre_publish invocation");
+      return "approve";
+    };
+    const result = await run(
+      domain,
+      { doneAfter: 5 },
+      makeConfig({
+        budget: { max_iterations: 1 },
+        gates: { post_plan: false, pre_publish: true },
+        gate_resolver: guard,
+      }),
+      makeInfra(),
+      "test-domain",
+    );
+    expect(result.ok).toBe(false);
+    expect(result.budget.limit_hit).toBe("iterations");
   });
 });

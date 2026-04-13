@@ -34,4 +34,13 @@ describe("gate resolvers", () => {
     await resolver(event);
     await expect(resolver(event)).rejects.toThrow(/scripted gate resolver exhausted/);
   });
+
+  it("resolves pre_publish events through auto resolvers", async () => {
+    const event: GateEvent<"k", { count: number }> = {
+      kind: "pre_publish",
+      state: { count: 42 },
+    };
+    expect(await autoApproveGateResolver(event)).toBe("approve");
+    expect(await autoRejectGateResolver(event)).toBe("reject");
+  });
 });
