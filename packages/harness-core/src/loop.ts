@@ -107,30 +107,20 @@ export async function run<TK extends string, S>(
       plan = markFailed(plan, task.id);
     }
 
-    await appendEvent(runDir, { task, delta });
-    await snapshot(runDir, { state: domain.serializeState(state), plan, budget: budget.snapshot() });
-
     if (task.gate_after) {
       const decision = await config.gate_resolver({ kind: "task_gate_after", task, delta });
       if (decision === "reject") {
         plan = markRevise(plan, task.id, "user rejected at post-task gate");
+        await appendEvent(runDir, { task, delta });
+        await snapshot(runDir, { state: domain.serializeState(state), plan, budget: budget.snapshot() });
         continue;
       }
-    }
-
-    if (delta.kind === "failure") {
-      const verdict = await domain.evaluate({ state, config });
-      if (verdict.kind === "abort") {
-        return { ok: false, state, budget: budget.snapshot(), reason: verdict.reason, run_dir: runDir };
-      }
-      if (verdict.kind === "redirect") {
-        plan = await domain.replan({ state, config }, verdict.reason);
-        continue;
-      }
-      continue;
     }
 
     const verdict = await domain.evaluate({ state, config });
+    await appendEvent(runDir, { task, delta, verdict });
+    await snapshot(runDir, { state: domain.serializeState(state), plan, budget: budget.snapshot() });
+
     switch (verdict.kind) {
       case "continue":
         break;

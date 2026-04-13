@@ -151,4 +151,149 @@ describe("run loop", () => {
     const events = (await readFile(join(result.run_dir, "events.jsonl"), "utf8")).trim().split("\n");
     expect(events.length).toBeGreaterThanOrEqual(2);
   });
+
+  it("resolves ok when handler fails and evaluate returns done", async () => {
+    let evaluateCalls = 0;
+    let handlerCalls = 0;
+    const domain: HarnessDomain<"inc", CountState> = {
+      async planInitial() {
+        return makePlan([
+          {
+            id: "t0",
+            kind: "inc",
+            params: {},
+            deps: [],
+            input_refs: [],
+            acceptance_criteria: "",
+            gate_before: false,
+            gate_after: false,
+            status: "pending",
+          },
+          {
+            id: "t1",
+            kind: "inc",
+            params: {},
+            deps: ["t0"],
+            input_refs: [],
+            acceptance_criteria: "",
+            gate_before: false,
+            gate_after: false,
+            status: "pending",
+          },
+        ]);
+      },
+      async replan() { return makePlan([]); },
+      handlers: {
+        inc: async (): Promise<Delta<CountState>> => {
+          handlerCalls += 1;
+          return {
+            kind: "failure",
+            patches: [],
+            cost: { input_tokens: 1, output_tokens: 1, usd: 0 },
+            error: { message: "boom", retryable: false },
+          };
+        },
+      },
+      async evaluate(): Promise<Verdict> {
+        evaluateCalls += 1;
+        return { kind: "done" };
+      },
+      isDone: () => false,
+      initState: () => ({ count: 0, doneAfter: 999 }),
+      serializeState: (s) => s,
+      deserializeState: (o) => o as CountState,
+    };
+
+    const result = await run(domain, {}, makeConfig(), makeInfra(), "test-domain");
+
+    expect(result.ok).toBe(true);
+    expect(result.reason).toBeUndefined();
+    expect(evaluateCalls).toBe(1);
+    // The second task must NOT have been dispatched — we stopped on done after the first failure.
+    expect(handlerCalls).toBe(1);
+  });
+
+  it("routes failure+revise through markRevise so the task becomes pending again", async () => {
+    let handlerCalls = 0;
+    let evaluateCalls = 0;
+    const observedFeedback: string[] = [];
+    const domain: HarnessDomain<"inc", CountState> = {
+      async planInitial() {
+        return makePlan([
+          {
+            id: "t0",
+            kind: "inc",
+            params: {},
+            deps: [],
+            input_refs: [],
+            acceptance_criteria: "",
+            gate_before: false,
+            gate_after: false,
+            status: "pending",
+          },
+        ]);
+      },
+      async replan() {
+        return makePlan([
+          {
+            id: "t0",
+            kind: "inc",
+            params: {},
+            deps: [],
+            input_refs: [],
+            acceptance_criteria: "",
+            gate_before: false,
+            gate_after: false,
+            status: "pending",
+          },
+        ]);
+      },
+      handlers: {
+        inc: async (task): Promise<Delta<CountState>> => {
+          handlerCalls += 1;
+          if (typeof task.params.revise_feedback === "string") {
+            observedFeedback.push(task.params.revise_feedback);
+          }
+          if (handlerCalls === 1) {
+            return {
+              kind: "failure",
+              patches: [],
+              cost: { input_tokens: 1, output_tokens: 1, usd: 0 },
+              error: { message: "first attempt fails", retryable: false },
+            };
+          }
+          return {
+            kind: "success",
+            patches: [{ op: "set", path: ["count"], value: 1 }],
+            cost: { input_tokens: 1, output_tokens: 1, usd: 0 },
+          };
+        },
+      },
+      async evaluate(): Promise<Verdict> {
+        evaluateCalls += 1;
+        if (evaluateCalls === 1) {
+          return { kind: "revise", task_id: "t0", feedback: "please retry" };
+        }
+        return { kind: "done" };
+      },
+      isDone: (state) => state.count >= 1,
+      initState: () => ({ count: 0, doneAfter: 1 }),
+      serializeState: (s) => s,
+      deserializeState: (o) => o as CountState,
+    };
+
+    const result = await run(
+      domain,
+      {},
+      makeConfig({ budget: { max_iterations: 5 } }),
+      makeInfra(),
+      "test-domain",
+    );
+
+    expect(result.ok).toBe(true);
+    // handler ran once (failure) then again (success after revise)
+    expect(handlerCalls).toBe(2);
+    // second invocation observed the revise_feedback stamped on params by markRevise
+    expect(observedFeedback).toContain("please retry");
+  });
 });
