@@ -1,4 +1,4 @@
-import type { ActionableFeedback, AudienceFeedback, StateRef } from "../schemas/index.js";
+import type { ActionableFeedback, AudienceFeedback, SocialStateRef } from "../schemas/index.js";
 
 export interface EvalThresholds {
   eval_pass: number;
@@ -14,7 +14,7 @@ export interface AggregateResult {
   actionable_feedback: ActionableFeedback[];
 }
 
-export function aggregate(feedback: AudienceFeedback[], thresholds: EvalThresholds, target?: StateRef): AggregateResult {
+export function aggregate(feedback: AudienceFeedback[], thresholds: EvalThresholds, target?: SocialStateRef): AggregateResult {
   if (feedback.length === 0) {
     return {
       aggregated_score: 0,

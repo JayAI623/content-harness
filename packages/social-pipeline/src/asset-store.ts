@@ -1,7 +1,7 @@
 import { appendFile, mkdir, readFile, writeFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import type { AssetRef, AssetStore } from "@content-harness/core";
-import type { SocialAssetRef } from "./refs.js";
+import type { SocialAssetRef } from "./schemas/index.js";
 
 const BUCKETS_JSONL = new Set([
   "reference_posts",

@@ -79,8 +79,8 @@ export const PieceSchema = z.object({
   eval_history: z.array(EvalRoundSchema),
 });
 
-export type AssetRef = z.infer<typeof AssetRefSchema>;
-export type StateRef = z.infer<typeof StateRefSchema>;
+export type SocialAssetRef = z.infer<typeof AssetRefSchema>;
+export type SocialStateRef = z.infer<typeof StateRefSchema>;
 export type RawMaterial = z.infer<typeof RawMaterialSchema>;
 export type PlatformVariant = z.infer<typeof PlatformVariantSchema>;
 export type AudienceFeedback = z.infer<typeof AudienceFeedbackSchema>;

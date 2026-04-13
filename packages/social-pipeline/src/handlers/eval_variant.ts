@@ -1,9 +1,8 @@
 import type { Delta, InfraBundle, Task, TaskHandler } from "@content-harness/core";
-import type { SocialAssetRef } from "../refs.js";
 import { aggregate } from "../eval/aggregator.js";
 import { simulateAudience } from "../eval/simulator.js";
 import { DEFAULT_EVALUATOR_PERSONAS } from "../eval/personas.js";
-import type { EvalRound, EvaluatorPersona } from "../schemas/index.js";
+import type { EvalRound, EvaluatorPersona, SocialAssetRef } from "../schemas/index.js";
 import type { SocialState } from "../state.js";
 
 const DEFAULT_THRESHOLDS = { eval_pass: 0.7, ai_smell_max: 0.3, depth_min: 0.5 };
