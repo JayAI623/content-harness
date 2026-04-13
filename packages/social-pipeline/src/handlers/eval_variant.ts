@@ -1,4 +1,5 @@
-import type { AssetRef, Delta, InfraBundle, Task, TaskHandler } from "@content-harness/core";
+import type { Delta, InfraBundle, Task, TaskHandler } from "@content-harness/core";
+import type { SocialAssetRef } from "../refs.js";
 import { aggregate } from "../eval/aggregator.js";
 import { simulateAudience } from "../eval/simulator.js";
 import { DEFAULT_EVALUATOR_PERSONAS } from "../eval/personas.js";
@@ -26,7 +27,9 @@ export const evalVariantHandler: TaskHandler<SocialState> = async (
 
   // Resolve evaluator personas via AssetRefs in task.input_refs. Fall back to defaults
   // if the asset pool does not yet contain them (bootstrap case).
-  const personaRefs: AssetRef[] = task.input_refs.filter((r) => r.kind === "evaluator_persona");
+  const personaRefs: SocialAssetRef[] = task.input_refs.filter(
+    (r): r is SocialAssetRef => r.kind === "evaluator_persona",
+  );
   const resolvedPersonas: EvaluatorPersona[] = [];
   for (const ref of personaRefs) {
     const p = await infra.assets.resolve<EvaluatorPersona>(state.persona.asset_pool_id, ref);

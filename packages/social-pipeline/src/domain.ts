@@ -1,5 +1,4 @@
 import type {
-  AssetRef,
   HarnessDomain,
   PlanContext,
   Task,
@@ -7,6 +6,7 @@ import type {
   Verdict,
   WorkPlan,
 } from "@content-harness/core";
+import type { SocialAssetRef } from "./refs.js";
 import { makeResearchRefsHandler } from "./handlers/research_refs.js";
 import { draftBaseHandler } from "./handlers/draft_base.js";
 import { refineVariantHandler } from "./handlers/refine_variant.js";
@@ -41,7 +41,7 @@ function buildInitialPlan(state: SocialState): WorkPlan<SocialTaskKind> {
   // v1: twitter-only
   const platform: string = primaryPlatforms.includes("twitter") ? "twitter" : primaryPlatforms[0] ?? "twitter";
 
-  const evaluatorRefs: AssetRef[] = state.persona.audience.evaluator_persona_ids.map((id) => ({
+  const evaluatorRefs: SocialAssetRef[] = state.persona.audience.evaluator_persona_ids.map((id) => ({
     kind: "evaluator_persona",
     id,
   }));
@@ -110,7 +110,7 @@ function buildRevisePlan(state: SocialState, rejectedIdx: number): WorkPlan<Soci
   // so its index in the resulting array will be the current length.
   const newVariantIdx = state.piece.platform_variants.length;
 
-  const evaluatorRefs: AssetRef[] = state.persona.audience.evaluator_persona_ids.map((id) => ({
+  const evaluatorRefs: SocialAssetRef[] = state.persona.audience.evaluator_persona_ids.map((id) => ({
     kind: "evaluator_persona",
     id,
   }));

@@ -1,18 +1,17 @@
-// ─── Reference unions ────────────────────────────────────────────
-export type AssetRef =
-  | { kind: "reference_post";    id: string }
-  | { kind: "style_pattern";     id: string }
-  | { kind: "hot_topic";         platform: string; topic: string }
-  | { kind: "evaluator_persona"; id: string }
-  | { kind: "own_post";          piece_id: string; platform: string }
-  | { kind: "voice_fingerprint" };
+// ─── Reference base shapes ───────────────────────────────────────
+// AssetRef: a pointer to an artifact stored in an AssetStore. Core only knows
+// it has a kind discriminator; domains extend with their own typed unions
+// (see packages/social-pipeline/src/refs.ts for the social domain's version).
+export interface AssetRef {
+  kind: string;
+  [key: string]: unknown;
+}
 
-export type StateRef =
-  | { kind: "raw_material";     piece_id: string; material_id: string }
-  | { kind: "base_article";     piece_id: string }
-  | { kind: "platform_variant"; piece_id: string; platform: string; variant_idx: number }
-  | { kind: "eval_round";       piece_id: string; round: number }
-  | { kind: "deliverable";      path: string };
+// StateRef: a pointer into a domain's state tree. Same pattern as AssetRef.
+export interface StateRef {
+  kind: string;
+  [key: string]: unknown;
+}
 
 // ─── Tasks & plans ───────────────────────────────────────────────
 export interface Task<TaskKind extends string = string> {
@@ -21,7 +20,6 @@ export interface Task<TaskKind extends string = string> {
   params: Record<string, unknown>;
   deps: string[];
   input_refs: AssetRef[];
-  result_ref?: StateRef;
   acceptance_criteria: string;
   gate_before: boolean;
   gate_after: boolean;
@@ -70,7 +68,8 @@ export interface Delta<State> {
   cost: CostAccounting;
   logs?: LogEntry[];
   error?: { message: string; retryable: boolean };
-  // Handlers may attach the produced artifact so persistence can write deliverables.
+  // Handlers may attach a reference to the artifact they produced; it's written
+  // to events.jsonl alongside the delta so run consumers can locate results.
   result_ref?: StateRef;
 }
 
@@ -179,7 +178,6 @@ export interface RunConfig {
     pre_publish: boolean;
   };
   gate_resolver: GateResolver;
-  resume_from?: string;
   thresholds: {
     eval_pass: number;
     ai_smell_max: number;

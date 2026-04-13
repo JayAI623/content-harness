@@ -1,6 +1,7 @@
 export * from "./schemas/index.js";
 export * from "./state.js";
 export * from "./domain.js";
+export type { SocialAssetRef, SocialStateRef } from "./refs.js";
 export { makeFilesystemAssetStore } from "./asset-store.js";
 export { makeOpencliSubprocessClient, fakeOpencliClient } from "./opencli-client.js";
 export type { OpencliClient } from "./opencli-client.js";

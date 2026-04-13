@@ -1,6 +1,7 @@
 import { appendFile, mkdir, readFile, writeFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import type { AssetRef, AssetStore } from "@content-harness/core";
+import type { SocialAssetRef } from "./refs.js";
 
 const BUCKETS_JSONL = new Set([
   "reference_posts",
@@ -50,26 +51,29 @@ export function makeFilesystemAssetStore(root: string): AssetStore {
     },
 
     async resolve<T>(pool: string, ref: AssetRef): Promise<T | null> {
-      switch (ref.kind) {
+      // Core's AssetRef is structural; this filesystem store is specifically
+      // for the social domain, so narrow to SocialAssetRef for typed dispatch.
+      const sref = ref as SocialAssetRef;
+      switch (sref.kind) {
         case "reference_post": {
           const all = await readJsonl<{ id: string }>(bucketFile(root, pool, "reference_posts"));
-          return (all.find((r) => r.id === ref.id) as T | undefined) ?? null;
+          return (all.find((r) => r.id === sref.id) as T | undefined) ?? null;
         }
         case "style_pattern": {
           const all = await readJsonl<{ id: string }>(bucketFile(root, pool, "style_patterns"));
-          return (all.find((r) => r.id === ref.id) as T | undefined) ?? null;
+          return (all.find((r) => r.id === sref.id) as T | undefined) ?? null;
         }
         case "hot_topic": {
           const all = await readJsonl<{ platform: string; topic: string }>(bucketFile(root, pool, "hot_topics"));
-          return (all.find((r) => r.platform === ref.platform && r.topic === ref.topic) as T | undefined) ?? null;
+          return (all.find((r) => r.platform === sref.platform && r.topic === sref.topic) as T | undefined) ?? null;
         }
         case "evaluator_persona": {
           const all = await readJsonl<{ id: string }>(bucketFile(root, pool, "evaluator_personas"));
-          return (all.find((r) => r.id === ref.id) as T | undefined) ?? null;
+          return (all.find((r) => r.id === sref.id) as T | undefined) ?? null;
         }
         case "own_post": {
           const all = await readJsonl<{ piece_id: string; platform: string }>(bucketFile(root, pool, "own_history"));
-          return (all.find((r) => r.piece_id === ref.piece_id && r.platform === ref.platform) as T | undefined) ?? null;
+          return (all.find((r) => r.piece_id === sref.piece_id && r.platform === sref.platform) as T | undefined) ?? null;
         }
         case "voice_fingerprint": {
           const path = join(root, pool, "voice_fingerprint.json");
