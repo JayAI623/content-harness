@@ -6,18 +6,19 @@ import type {
   Verdict,
   WorkPlan,
 } from "@content-harness/core";
+import { z } from "zod";
 import { makeResearchRefsHandler } from "./handlers/research_refs.js";
 import { draftBaseHandler } from "./handlers/draft_base.js";
 import { refineVariantHandler } from "./handlers/refine_variant.js";
 import { evalVariantHandler } from "./handlers/eval_variant.js";
 import { reviseHandler } from "./handlers/revise.js";
 import type { OpencliClient } from "./opencli-client.js";
-import type {
-  Persona,
-  Campaign,
-  Piece,
-  PlatformVariant,
-  SocialAssetRef,
+import {
+  PersonaSchema,
+  CampaignSchema,
+  PieceSchema,
+  type PlatformVariant,
+  type SocialAssetRef,
 } from "./schemas/index.js";
 import { initSocialState, type SocialState } from "./state.js";
 
@@ -207,11 +208,11 @@ export function makeSocialDomain(deps: SocialDomainDeps): HarnessDomain<SocialTa
   const ids = makeIdGen();
 
   return {
-    async planInitial(ctx: PlanContext<SocialState>): Promise<WorkPlan<SocialTaskKind>> {
+    async planInitial(ctx: PlanContext<SocialTaskKind, SocialState>): Promise<WorkPlan<SocialTaskKind>> {
       return buildInitialPlan(ctx.state, ids);
     },
 
-    async replan(ctx: PlanContext<SocialState>, _reason: string): Promise<WorkPlan<SocialTaskKind>> {
+    async replan(ctx: PlanContext<SocialTaskKind, SocialState>, _reason: string): Promise<WorkPlan<SocialTaskKind>> {
       // If the latest variant for any platform is rejected and still has
       // revision budget, build a focused revise+eval_variant plan. Otherwise
       // fall back to a full initial plan.
@@ -224,7 +225,7 @@ export function makeSocialDomain(deps: SocialDomainDeps): HarnessDomain<SocialTa
 
     handlers,
 
-    async evaluate(ctx: PlanContext<SocialState>): Promise<Verdict> {
+    async evaluate(ctx: PlanContext<SocialTaskKind, SocialState>): Promise<Verdict> {
       const state = ctx.state;
       const maxRevisions = ctx.config.max_revisions;
       const variants = state.piece.platform_variants;
@@ -256,8 +257,14 @@ export function makeSocialDomain(deps: SocialDomainDeps): HarnessDomain<SocialTa
     },
 
     initState(input: unknown): SocialState {
-      const { persona, campaign, piece } = input as { persona: Persona; campaign: Campaign; piece: Piece };
-      return initSocialState({ persona, campaign, piece });
+      const parsed = z
+        .object({
+          persona: PersonaSchema,
+          campaign: CampaignSchema,
+          piece: PieceSchema,
+        })
+        .parse(input);
+      return initSocialState(parsed);
     },
 
     serializeState(state: SocialState): object {

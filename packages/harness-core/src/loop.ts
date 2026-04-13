@@ -1,56 +1,20 @@
 import { Budget } from "./budget.js";
+import { applyDelta } from "./patch.js";
 import { appendEvent, createRun, snapshot } from "./persistence.js";
-import { markCompleted, markFailed, markRevise, selectNextRunnable, markRejected } from "./planner.js";
+import { hasFailed, markCompleted, markFailed, markRevise, selectNextRunnable, markRejected } from "./planner.js";
 import { runWithRetry } from "./retry.js";
 import type {
-  Delta,
   HarnessDomain,
   InfraBundle,
   RunConfig,
   RunResult,
-  StatePatch,
   WorkPlan,
 } from "./types.js";
-
-function applyPatch<S>(state: S, patch: StatePatch): S {
-  if (patch.path.length === 0) {
-    return patch.value as S;
-  }
-  const copy: any = Array.isArray(state) ? [...(state as any)] : { ...(state as any) };
-  let cursor: any = copy;
-  for (let i = 0; i < patch.path.length - 1; i++) {
-    const k = patch.path[i]!;
-    cursor[k] = Array.isArray(cursor[k]) ? [...cursor[k]] : { ...(cursor[k] ?? {}) };
-    cursor = cursor[k];
-  }
-  const last = patch.path[patch.path.length - 1]!;
-  switch (patch.op) {
-    case "set":
-      cursor[last] = patch.value;
-      break;
-    case "append": {
-      const arr = Array.isArray(cursor[last]) ? [...cursor[last]] : [];
-      arr.push(patch.value);
-      cursor[last] = arr;
-      break;
-    }
-    case "merge":
-      cursor[last] = { ...(cursor[last] ?? {}), ...(patch.value as object) };
-      break;
-  }
-  return copy as S;
-}
-
-function applyDelta<S>(state: S, delta: Delta<S>): S {
-  let next = state;
-  for (const p of delta.patches) next = applyPatch(next, p);
-  return next;
-}
 
 export async function run<TK extends string, S>(
   domain: HarnessDomain<TK, S>,
   input: unknown,
-  config: RunConfig,
+  config: RunConfig<TK, S>,
   infra: InfraBundle,
   domainId: string,
 ): Promise<RunResult<S>> {
@@ -70,6 +34,7 @@ export async function run<TK extends string, S>(
   let state = domain.initState(input);
   let plan: WorkPlan<TK> = await domain.planInitial({ state, config });
   const budget = new Budget(config.budget, () => infra.clock.now());
+  let step = 0;
 
   const runDir = await createRun({
     run_root: config.run_root,
@@ -77,7 +42,8 @@ export async function run<TK extends string, S>(
     domain_id: domainId,
     started_at: infra.clock.now(),
   });
-  await snapshot(runDir, { state: domain.serializeState(state), plan, budget: budget.snapshot() });
+  await snapshot(runDir, step, { state: domain.serializeState(state), plan, budget: budget.snapshot() });
+  step += 1;
 
   // Structural gate: post_plan
   if (config.gates.post_plan) {
@@ -91,6 +57,16 @@ export async function run<TK extends string, S>(
   while (!domain.isDone(state) && !budget.exhausted()) {
     const task = selectNextRunnable(plan, state);
     if (!task) {
+      const failed = hasFailed(plan);
+      if (failed) {
+        return {
+          ok: false,
+          state,
+          budget: budget.snapshot(),
+          reason: `failed task "${failed.id}" has no recovery path`,
+          run_dir: runDir,
+        };
+      }
       stuckChecks += 1;
       if (stuckChecks > 3) {
         return { ok: false, state, budget: budget.snapshot(), reason: "no runnable task", run_dir: runDir };
@@ -108,7 +84,17 @@ export async function run<TK extends string, S>(
       }
     }
 
-    const delta = await runWithRetry(domain.handlers[task.kind], task, state, infra, config.retry);
+    const handler = domain.handlers[task.kind];
+    if (!handler) {
+      return {
+        ok: false,
+        state,
+        budget: budget.snapshot(),
+        reason: `no handler for task kind "${task.kind}"`,
+        run_dir: runDir,
+      };
+    }
+    const delta = await runWithRetry(handler, task, state, infra, config.retry);
 
     state = applyDelta(state, delta);
     budget.charge(delta.cost);
@@ -125,14 +111,16 @@ export async function run<TK extends string, S>(
       if (decision === "reject") {
         plan = markRevise(plan, task.id, "user rejected at post-task gate");
         await appendEvent(runDir, { task, delta });
-        await snapshot(runDir, { state: domain.serializeState(state), plan, budget: budget.snapshot() });
+        await snapshot(runDir, step, { state: domain.serializeState(state), plan, budget: budget.snapshot() });
+        step += 1;
         continue;
       }
     }
 
     const verdict = await domain.evaluate({ state, config });
     await appendEvent(runDir, { task, delta, verdict });
-    await snapshot(runDir, { state: domain.serializeState(state), plan, budget: budget.snapshot() });
+    await snapshot(runDir, step, { state: domain.serializeState(state), plan, budget: budget.snapshot() });
+    step += 1;
 
     switch (verdict.kind) {
       case "continue":
@@ -144,13 +132,16 @@ export async function run<TK extends string, S>(
         plan = await domain.replan({ state, config }, verdict.reason);
         break;
       case "done": {
-        await snapshot(runDir, { state: domain.serializeState(state), plan, budget: budget.snapshot() });
         const rejection = await maybePrePublishReject(state, budget, runDir);
         if (rejection) return rejection;
         return { ok: true, state, budget: budget.snapshot(), run_dir: runDir };
       }
       case "abort":
         return { ok: false, state, budget: budget.snapshot(), reason: verdict.reason, run_dir: runDir };
+      default: {
+        const _exhaustive: never = verdict;
+        throw new Error(`unhandled verdict kind: ${(_exhaustive as { kind: string }).kind}`);
+      }
     }
   }
 

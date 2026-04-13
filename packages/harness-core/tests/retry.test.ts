@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { runWithRetry } from "../src/retry.js";
-import type { Delta, InfraBundle, Task } from "../src/types.js";
+import type { Delta, InfraBundle, Task, TaskHandler } from "../src/types.js";
 
 const makeTask = (): Task<string> => ({
   id: "t",
@@ -77,5 +77,57 @@ describe("runWithRetry", () => {
     const result = await runWithRetry(handler, makeTask(), {}, fakeInfra, { max_attempts: 3, backoff_ms: 0 });
     expect(result.kind).toBe("success");
     expect(handler).toHaveBeenCalledTimes(2);
+  });
+
+  it("accumulates cost across retryable failure attempts", async () => {
+    let attempt = 0;
+    const handler: TaskHandler<{}> = async () => {
+      attempt += 1;
+      if (attempt < 3) {
+        return {
+          kind: "failure",
+          patches: [],
+          cost: { input_tokens: 10, output_tokens: 5, usd: 0.01 },
+          error: { message: "transient", retryable: true },
+        };
+      }
+      return {
+        kind: "success",
+        patches: [],
+        cost: { input_tokens: 20, output_tokens: 10, usd: 0.02 },
+      };
+    };
+    const delta = await runWithRetry(
+      handler,
+      makeTask(),
+      {},
+      fakeInfra,
+      { max_attempts: 5, backoff_ms: 0 },
+    );
+    expect(delta.kind).toBe("success");
+    // 10+10+20 input, 5+5+10 output, 0.01+0.01+0.02 usd
+    expect(delta.cost.input_tokens).toBe(40);
+    expect(delta.cost.output_tokens).toBe(20);
+    expect(delta.cost.usd).toBeCloseTo(0.04, 5);
+  });
+
+  it("returns the accumulated cost even when all retries fail", async () => {
+    const handler: TaskHandler<{}> = async () => ({
+      kind: "failure",
+      patches: [],
+      cost: { input_tokens: 7, output_tokens: 3, usd: 0.005 },
+      error: { message: "flaky", retryable: true },
+    });
+    const delta = await runWithRetry(
+      handler,
+      makeTask(),
+      {},
+      fakeInfra,
+      { max_attempts: 3, backoff_ms: 0 },
+    );
+    expect(delta.kind).toBe("failure");
+    expect(delta.cost.input_tokens).toBe(21);
+    expect(delta.cost.output_tokens).toBe(9);
+    expect(delta.cost.usd).toBeCloseTo(0.015, 5);
   });
 });
