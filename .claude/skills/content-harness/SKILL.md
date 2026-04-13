@@ -44,7 +44,7 @@ node --input-type=module -e "
   import { PersonaSchema, CampaignSchema, PieceSchema } from './packages/schemas/dist/index.js';
   import { parse } from 'yaml';
   import { readFileSync } from 'node:fs';
-  const [pp, cp, piecep] = process.argv.slice(2);
+  const [pp, cp, piecep] = process.argv.slice(1);
   try {
     const persona  = PersonaSchema.parse(parse(readFileSync(pp,'utf8')));
     const campaign = CampaignSchema.parse(parse(readFileSync(cp,'utf8')));
