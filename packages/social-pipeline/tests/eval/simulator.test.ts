@@ -22,13 +22,16 @@ describe("simulateAudience", () => {
         stop_reason: "end_turn",
       },
     ]);
-    const feedback = await simulateAudience(llm, {
+    const { feedback, cost } = await simulateAudience(llm, {
       variant_text: "hello world",
       personas: DEFAULT_EVALUATOR_PERSONAS,
     });
     expect(feedback).toHaveLength(3);
     expect(feedback[0]!.engagement_likelihood).toBe(0.8);
     expect(feedback.every((f) => f.from.kind === "evaluator_persona")).toBe(true);
+    expect(cost.input_tokens).toBe(30);
+    expect(cost.output_tokens).toBe(60);
+    expect(cost.usd).toBeCloseTo(0.003);
   });
 
   it("handles malformed JSON by marking persona with low scores", async () => {
@@ -39,12 +42,15 @@ describe("simulateAudience", () => {
         stop_reason: "end_turn",
       },
     ]);
-    const feedback = await simulateAudience(llm, {
+    const { feedback, cost } = await simulateAudience(llm, {
       variant_text: "hi",
       personas: [DEFAULT_EVALUATOR_PERSONAS[0]!],
     });
     expect(feedback).toHaveLength(1);
     expect(feedback[0]!.engagement_likelihood).toBe(0);
     expect(feedback[0]!.ai_smell_score).toBe(1);
+    expect(cost.input_tokens).toBe(10);
+    expect(cost.output_tokens).toBe(20);
+    expect(cost.usd).toBeCloseTo(0.001);
   });
 });

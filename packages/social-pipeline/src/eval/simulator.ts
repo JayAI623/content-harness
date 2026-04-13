@@ -1,4 +1,4 @@
-import type { LLMClient } from "@content-harness/core";
+import type { LLMClient, CostAccounting } from "@content-harness/core";
 import type { AudienceFeedback, EvaluatorPersona } from "../schemas/index.js";
 
 interface SimulateOpts {
@@ -56,7 +56,10 @@ function clamp01(n: unknown): number {
   return Math.max(0, Math.min(1, x));
 }
 
-export async function simulateAudience(llm: LLMClient, opts: SimulateOpts): Promise<AudienceFeedback[]> {
+export async function simulateAudience(
+  llm: LLMClient,
+  opts: SimulateOpts,
+): Promise<{ feedback: AudienceFeedback[]; cost: CostAccounting }> {
   const platform = opts.platform ?? "social media";
   const calls = opts.personas.map(async (persona) => {
     const result = await llm.complete({
@@ -70,7 +73,16 @@ export async function simulateAudience(llm: LLMClient, opts: SimulateOpts): Prom
       max_tokens: 400,
       temperature: 0.3,
     });
-    return parseFeedback(result.text, persona);
+    return { feedback: parseFeedback(result.text, persona), cost: result.cost };
   });
-  return Promise.all(calls);
+  const results = await Promise.all(calls);
+  const cost: CostAccounting = results.reduce(
+    (acc, r) => ({
+      input_tokens: acc.input_tokens + r.cost.input_tokens,
+      output_tokens: acc.output_tokens + r.cost.output_tokens,
+      usd: acc.usd + r.cost.usd,
+    }),
+    { input_tokens: 0, output_tokens: 0, usd: 0 },
+  );
+  return { feedback: results.map((r) => r.feedback), cost };
 }

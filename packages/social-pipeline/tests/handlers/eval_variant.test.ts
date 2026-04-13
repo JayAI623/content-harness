@@ -89,6 +89,9 @@ describe("eval_variant handler", () => {
     expect(delta.patches.some((p) => p.op === "append" && p.path.join(".") === "piece.eval_history")).toBe(true);
     const statusPatch = delta.patches.find((p) => p.path.includes("status"));
     expect(statusPatch?.value).toBe("accepted");
+    expect(delta.cost.input_tokens).toBe(1200);
+    expect(delta.cost.output_tokens).toBe(240);
+    expect(delta.cost.usd).toBeCloseTo(0.006);
   });
 
   it("marks variant rejected when thresholds fail", async () => {
@@ -120,5 +123,8 @@ describe("eval_variant handler", () => {
     expect(delta.kind).toBe("success");
     const statusPatch = delta.patches.find((p) => p.path.includes("status"));
     expect(statusPatch?.value).toBe("rejected");
+    expect(delta.cost.input_tokens).toBe(1200);
+    expect(delta.cost.output_tokens).toBe(240);
+    expect(delta.cost.usd).toBeCloseTo(0.006);
   });
 });

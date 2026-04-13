@@ -34,7 +34,7 @@ export const evalVariantHandler: TaskHandler<SocialState> = async (
   }
   const personas = resolvedPersonas.length > 0 ? resolvedPersonas : DEFAULT_EVALUATOR_PERSONAS;
 
-  const feedback = await simulateAudience(infra.llm, {
+  const { feedback, cost } = await simulateAudience(infra.llm, {
     variant_text: variant.content,
     personas,
     platform,
@@ -75,7 +75,7 @@ export const evalVariantHandler: TaskHandler<SocialState> = async (
         value: agg.aggregated_score,
       },
     ],
-    cost: { input_tokens: 0, output_tokens: 0, usd: 0 },
+    cost,
     result_ref: { kind: "eval_round", piece_id: state.piece.id, round },
   };
 };
