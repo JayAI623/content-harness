@@ -22,3 +22,4 @@ export { systemClock, fakeClock } from "./infra/clock.js";
 export { consoleLogger, fileLogger, silentLogger } from "./infra/logger.js";
 export { makeAnthropicClient, fakeLLMClient } from "./infra/llm.js";
 export type { AnthropicClientConfig, FakeLLMClient } from "./infra/llm.js";
+export { applyPatch, applyDelta } from "./patch.js";
