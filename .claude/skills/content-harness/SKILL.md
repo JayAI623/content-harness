@@ -122,7 +122,7 @@ Input:
 }
 ```
 
-Store the returned markdown as `currentVariant`. Initialize `revisionCount := 0`.
+Store the returned markdown as `currentVariant`. Initialize `revisionCount := 0`. Initialize `bestVariant := currentVariant` and `bestScore := -Infinity` (or `-1`). The first evaluation will always seed both.
 
 #### 4b. Evaluate
 
@@ -145,12 +145,25 @@ Parse the returned JSON. Required fields: `aggregated_score` (number), `verdict`
 - Retry once by dispatching the critic again with an extra line appended: `Your previous response was not valid JSON. Return ONLY a JSON object per the schema.`
 - If the retry is still malformed, synthesize a fallback verdict: `{verdict: "revise", aggregated_score: 0, actionable_feedback: ["critic returned malformed response"], per_persona: []}` and continue.
 
+After every successful parse: **if `aggregated_score > bestScore`**, set `bestVariant := currentVariant` and `bestScore := aggregated_score`. (Strict `>` — on exact tie, keep the earlier variant.)
+
 #### 4c. Branch on verdict
 
 Compute `aiSmellOk := per_persona is empty OR every per_persona[i].ai_smell <= 0.3`.
 
-- **If `verdict == "accept"`** OR **(`aggregated_score >= 0.7` AND `aiSmellOk`)**:
-  - Append `{platform, content: currentVariant, score: aggregated_score}` to the in-memory `acceptedVariants` array
+Look up the per-platform accept threshold:
+
+```
+platformThreshold := {
+  "medium":       0.70,
+  "linkedin":     0.65,
+  "twitter":      0.62,
+  "xiaohongshu":  0.62
+}[platform] ?? 0.70   // default 0.70 for any unlisted platform
+```
+
+- **If `verdict == "accept"`** OR **(`aggregated_score >= platformThreshold` AND `aiSmellOk`)**:
+  - Append `{platform, content: bestVariant, score: bestScore}` to the in-memory `acceptedVariants` array
   - Continue to the next platform
 
 - **If `verdict == "abort"`**:
@@ -162,8 +175,8 @@ Compute `aiSmellOk := per_persona is empty OR every per_persona[i].ai_smell <= 0
 - **If `verdict == "revise"` (or the fallback verdict)**:
   - `revisionCount := revisionCount + 1`
   - If `revisionCount > maxRevisions`:
-    - Tell the user exactly: `variant for <platform> hit revision cap of <maxRevisions> with score <aggregated_score>. Force-accept current version, skip this platform, or abort run?`
-    - On "force-accept": append `{platform, content: currentVariant, score: aggregated_score}` to `acceptedVariants`, continue
+    - Tell the user exactly: `variant for <platform> hit revision cap of <maxRevisions> with score <bestScore>. Force-accept current version, skip this platform, or abort run?`
+    - On "force-accept": append `{platform, content: bestVariant, score: bestScore}` to `acceptedVariants`, continue
     - On "skip": continue to next platform
     - On "abort": end run, no files written
   - Else:
@@ -230,3 +243,4 @@ Tell the user:
 - Never write to `runs/` before the pre_publish gate passes (Step 5)
 - `maxRevisions` override only happens with explicit user consent (force-accept, skip, or abort)
 - When the skill stops for any reason other than Step 6 completing, no files have been written
+- Accepted variants always use the best-scoring round for that platform, never the last round unless the last round was the best

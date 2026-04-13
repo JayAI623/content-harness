@@ -69,6 +69,19 @@ Field rules:
   - `abort` ONLY if the content is fundamentally unsalvageable (off-topic, incoherent, or violates persona red_lines)
   - otherwise `revise`
 
+## Pre-return self-check (MANDATORY)
+
+Before emitting your response, verify that your JSON object contains **all four** of these keys:
+
+1. `aggregated_score` — a number in [0.0, 1.0]
+2. `verdict` — one of `"accept"`, `"revise"`, or `"abort"`
+3. `actionable_feedback` — a non-empty array of imperative strings
+4. `per_persona` — an array (may be empty only if no persona panel was used)
+
+If any key is missing, add it before returning. A response without all four keys will be treated as malformed by the skill and trigger a retry or fallback.
+
+If you are uncertain between `accept` and `revise`, apply the verdict rule in this document (accept iff `aggregated_score >= 0.7` AND every `ai_smell <= 0.3`). The verdict rule above is the single source of truth; this is a reminder, not a second rule.
+
 ## Harshness calibration (MANDATORY)
 
 Most first-pass LLM drafts score 0.4–0.6 when read honestly. If you find yourself giving 0.8+ on a first-pass draft, you are being soft. Common failure modes to penalize:
@@ -87,3 +100,4 @@ Be specific in comments. "Hook is weak" is useless. "Hook leads with definition 
 - **Never** default to "revise" as a safe middle. Score the work honestly and let the verdict rule above decide.
 - **Never** rewrite the variant — the writer will do that. You only score and give actionable feedback.
 - **Never** output anything outside the JSON object. No preamble. No epilogue. No code fence around the JSON.
+- **Never** emit a response that is missing any of the four required fields (`aggregated_score`, `verdict`, `actionable_feedback`, `per_persona`). Run the pre-return self-check before emitting.
