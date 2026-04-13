@@ -32,10 +32,6 @@ export interface SocialDomainDeps {
   opencli: OpencliClient;
 }
 
-// Fallback cap used by evaluate() (which doesn't get RunConfig).
-// replan() reads ctx.config.max_revisions instead — configurable per run.
-const MAX_REVISIONS = 3;
-
 interface IdGen {
   next(prefix: string): string;
 }
@@ -219,8 +215,7 @@ export function makeSocialDomain(deps: SocialDomainDeps): HarnessDomain<SocialTa
       // If the latest variant for any platform is rejected and still has
       // revision budget, build a focused revise+eval_variant plan. Otherwise
       // fall back to a full initial plan.
-      const maxRevisions = ctx.config.max_revisions ?? MAX_REVISIONS;
-      const rejected = findLatestRejectedNeedingRevision(ctx.state, maxRevisions);
+      const rejected = findLatestRejectedNeedingRevision(ctx.state, ctx.config.max_revisions);
       if (rejected) {
         return buildRevisePlan(ctx.state, rejected.idx, ids);
       }
@@ -229,7 +224,9 @@ export function makeSocialDomain(deps: SocialDomainDeps): HarnessDomain<SocialTa
 
     handlers,
 
-    async evaluate(state: SocialState): Promise<Verdict> {
+    async evaluate(ctx: PlanContext<SocialState>): Promise<Verdict> {
+      const state = ctx.state;
+      const maxRevisions = ctx.config.max_revisions;
       const variants = state.piece.platform_variants;
       if (variants.length === 0) return { kind: "continue" };
 
@@ -237,10 +234,10 @@ export function makeSocialDomain(deps: SocialDomainDeps): HarnessDomain<SocialTa
       for (const { variant } of getLatestVariantPerPlatform(state).values()) {
         if (variant.status === "accepted") continue;
         if (variant.status === "rejected") {
-          if (variant.revision_count >= MAX_REVISIONS) {
+          if (variant.revision_count >= maxRevisions) {
             return {
               kind: "abort",
-              reason: `variant for ${variant.platform} failed after ${MAX_REVISIONS} revisions`,
+              reason: `variant for ${variant.platform} failed after ${maxRevisions} revisions`,
             };
           }
           return { kind: "redirect", reason: `revise ${variant.platform} variant` };

@@ -90,7 +90,7 @@ export function makeFilesystemAssetStore(root: string): AssetStore {
           // added without a case above, this assignment fails to compile.
           const _exhaustive: never = sref;
           throw new Error(
-            `asset-store: unsupported ref kind '${(sref as { kind: string }).kind}'`,
+            `asset-store: unsupported ref kind '${(sref as { kind: string }).kind}' for pool '${pool}'`,
           );
         }
       }

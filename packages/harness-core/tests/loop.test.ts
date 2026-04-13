@@ -57,7 +57,7 @@ function countDomain(opts: { tasksToRun: number; gateAfterOn?: boolean }): Harne
         cost: { input_tokens: 1, output_tokens: 1, usd: 0 },
       }),
     },
-    async evaluate(state): Promise<Verdict> {
+    async evaluate({ state }): Promise<Verdict> {
       if (state.count >= state.doneAfter) return { kind: "done" };
       return { kind: "continue" };
     },

@@ -119,7 +119,7 @@ export async function run<TK extends string, S>(
     }
 
     if (delta.kind === "failure") {
-      const verdict = await domain.evaluate(state);
+      const verdict = await domain.evaluate({ state, config });
       if (verdict.kind === "abort") {
         return { ok: false, state, budget: budget.snapshot(), reason: verdict.reason, run_dir: runDir };
       }
@@ -130,7 +130,7 @@ export async function run<TK extends string, S>(
       continue;
     }
 
-    const verdict = await domain.evaluate(state);
+    const verdict = await domain.evaluate({ state, config });
     switch (verdict.kind) {
       case "continue":
         break;

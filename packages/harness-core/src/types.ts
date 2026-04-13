@@ -1,13 +1,16 @@
 // ─── Reference base shapes ───────────────────────────────────────
 // AssetRef: a pointer to an artifact stored in an AssetStore. Core only knows
 // it has a kind discriminator; domains extend with their own typed unions
-// (see packages/social-pipeline/src/refs.ts for the social domain's version).
+// (see SocialAssetRef in packages/social-pipeline/src/schemas/piece.ts for the
+// social domain's version, which is a discriminated zod union).
 export interface AssetRef {
   kind: string;
   [key: string]: unknown;
 }
 
-// StateRef: a pointer into a domain's state tree. Same pattern as AssetRef.
+// StateRef: a pointer into a domain's state tree. Same pattern as AssetRef;
+// see SocialStateRef in packages/social-pipeline/src/schemas/piece.ts for the
+// social domain's discriminated zod union.
 export interface StateRef {
   kind: string;
   [key: string]: unknown;
@@ -87,7 +90,7 @@ export interface HarnessDomain<TaskKind extends string, State> {
   planInitial(ctx: PlanContext<State>): Promise<WorkPlan<TaskKind>>;
   replan(ctx: PlanContext<State>, reason: string): Promise<WorkPlan<TaskKind>>;
   handlers: Record<TaskKind, TaskHandler<State>>;
-  evaluate(state: State): Promise<Verdict>;
+  evaluate(ctx: PlanContext<State>): Promise<Verdict>;
   isDone(state: State): boolean;
   initState(input: unknown): State;
   serializeState(state: State): object;

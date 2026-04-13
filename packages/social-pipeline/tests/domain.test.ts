@@ -86,7 +86,7 @@ describe("social domain", () => {
       }],
     };
     const state = domain.initState({ persona, campaign, piece: acceptedPiece });
-    const verdict = await domain.evaluate(state);
+    const verdict = await domain.evaluate({ state, config: stubConfig as any });
     expect(verdict.kind).toBe("done");
   });
 
@@ -113,7 +113,7 @@ describe("social domain", () => {
       }],
     };
     const state = domain.initState({ persona, campaign, piece: rejectedPiece });
-    const verdict = await domain.evaluate(state);
+    const verdict = await domain.evaluate({ state, config: stubConfig as any });
     expect(verdict.kind).toBe("redirect");
   });
 
@@ -140,12 +140,32 @@ describe("social domain", () => {
       }],
     };
     const state = domain.initState({ persona, campaign, piece: rejectedPiece });
-    const verdict = await domain.evaluate(state);
+    const verdict = await domain.evaluate({ state, config: stubConfig as any });
     expect(verdict.kind).toBe("abort");
     if (verdict.kind === "abort") {
       expect(typeof verdict.reason).toBe("string");
       expect(verdict.reason.length).toBeGreaterThan(0);
     }
+  });
+
+  it("evaluate returns abort when revision_count equals config.max_revisions (lower than default)", async () => {
+    const domain = makeSocialDomain({ opencli: fakeOpencliClient({}) });
+    const rejectedPiece = {
+      ...piece,
+      platform_variants: [{
+        platform: "twitter",
+        content: "x",
+        constraints_applied: [],
+        inspired_by: [],
+        style_patterns_applied: [],
+        status: "rejected" as const,
+        revision_count: 1,
+      }],
+    };
+    const state = domain.initState({ persona, campaign, piece: rejectedPiece });
+    const lowConfig = { ...stubConfig, max_revisions: 1 };
+    const verdict = await domain.evaluate({ state, config: lowConfig as any });
+    expect(verdict.kind).toBe("abort");
   });
 
   it("replan builds revise+eval_variant tasks when a variant is rejected", async () => {
@@ -232,11 +252,20 @@ describe("social domain", () => {
   });
 
   it("task counter is instance-scoped and does not reset across plan builds", async () => {
-    const domain = makeSocialDomain({ opencli: fakeOpencliClient({}) });
-    const state = domain.initState({ persona, campaign, piece });
-    const plan1 = await domain.planInitial({ state, config: stubConfig as any });
-    const plan2 = await domain.planInitial({ state, config: stubConfig as any });
-    const allIds = [...plan1.tasks, ...plan2.tasks].map((t) => t.id);
-    expect(new Set(allIds).size).toBe(allIds.length); // no collisions
+    const domain1 = makeSocialDomain({ opencli: fakeOpencliClient({}) });
+    const state = domain1.initState({ persona, campaign, piece });
+    const plan1a = await domain1.planInitial({ state, config: stubConfig as any });
+    const plan1b = await domain1.planInitial({ state, config: stubConfig as any });
+    // Two plans within one instance: IDs must not collide.
+    const allIds = [...plan1a.tasks, ...plan1b.tasks].map((t) => t.id);
+    expect(new Set(allIds).size).toBe(allIds.length);
+    // First task ID in the second plan reflects a NON-reset counter.
+    expect(plan1b.tasks[0]!.id).not.toBe(plan1a.tasks[0]!.id);
+
+    // A fresh domain instance starts its own counter at 1 — proving the
+    // counter is instance-scoped, not shared at the module level.
+    const domain2 = makeSocialDomain({ opencli: fakeOpencliClient({}) });
+    const plan2a = await domain2.planInitial({ state, config: stubConfig as any });
+    expect(plan2a.tasks[0]!.id).toBe("research_refs-1");
   });
 });
