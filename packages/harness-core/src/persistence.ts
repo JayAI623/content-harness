@@ -89,3 +89,51 @@ export async function loadLatestPlan<TK extends string>(runDir: string): Promise
   const raw = await readFile(join(planDir, `plan-${latestIdx}.json`), "utf8");
   return JSON.parse(raw) as WorkPlan<TK>;
 }
+
+export interface ResumedRun<S, TK extends string> {
+  state: S;
+  plan: WorkPlan<TK>;
+  budget: BudgetSnapshot;
+  step: number;
+}
+
+function indicesIn(dir: string, prefix: string): Promise<number[]> {
+  return readdir(dir)
+    .catch(() => [] as string[])
+    .then((entries) =>
+      entries
+        .filter((e) => e.startsWith(`${prefix}-`) && e.endsWith(".json"))
+        .map((e) => Number(e.slice(prefix.length + 1, -5)))
+        .filter((n) => Number.isFinite(n))
+        .sort((a, b) => a - b),
+    );
+}
+
+export async function resumeRun<S, TK extends string>(
+  runDir: string,
+): Promise<ResumedRun<S, TK> | null> {
+  const stateIdxs = new Set(await indicesIn(join(runDir, "state"), "state"));
+  const planIdxs = new Set(await indicesIn(join(runDir, "plan"), "plan"));
+  let highest = -1;
+  for (const n of stateIdxs) {
+    if (planIdxs.has(n) && n > highest) highest = n;
+  }
+  if (highest < 0) return null;
+  const [stateRaw, planRaw, budgetRaw] = await Promise.all([
+    readFile(join(runDir, "state", `state-${highest}.json`), "utf8"),
+    readFile(join(runDir, "plan", `plan-${highest}.json`), "utf8"),
+    readFile(join(runDir, "budget.json"), "utf8").catch(() => "null"),
+  ]);
+  return {
+    state: JSON.parse(stateRaw) as S,
+    plan: JSON.parse(planRaw) as WorkPlan<TK>,
+    budget: (JSON.parse(budgetRaw) as BudgetSnapshot | null) ?? {
+      used_tokens: 0,
+      used_usd: 0,
+      iterations: 0,
+      wall_seconds: 0,
+      exhausted: false,
+    },
+    step: highest,
+  };
+}
