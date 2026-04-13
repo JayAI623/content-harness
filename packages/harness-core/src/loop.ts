@@ -115,6 +115,10 @@ export async function run<TK extends string, S>(
       }
       case "abort":
         return { ok: false, state, budget: budget.snapshot(), reason: verdict.reason, run_dir: runDir };
+      default: {
+        const _exhaustive: never = verdict;
+        throw new Error(`unhandled verdict kind: ${(_exhaustive as { kind: string }).kind}`);
+      }
     }
   }
 

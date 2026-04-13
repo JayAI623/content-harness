@@ -451,6 +451,45 @@ describe("run loop", () => {
     expect(result.state.count).toBe(2);
   });
 
+  it("throws a clear error when evaluate returns an unknown verdict kind", async () => {
+    const domain: HarnessDomain<"inc", CountState> = {
+      async planInitial() {
+        return makePlan([
+          {
+            id: "t0",
+            kind: "inc",
+            params: {},
+            deps: [],
+            input_refs: [],
+            acceptance_criteria: "",
+            gate_before: false,
+            gate_after: false,
+            status: "pending",
+          },
+        ]);
+      },
+      async replan() { return makePlan([]); },
+      handlers: {
+        inc: async (_task, state): Promise<Delta<CountState>> => ({
+          kind: "success",
+          patches: [{ op: "set", path: ["count"], value: state.count + 1 }],
+          cost: { input_tokens: 1, output_tokens: 1, usd: 0 },
+        }),
+      },
+      async evaluate(): Promise<Verdict> {
+        return { kind: "sideways" } as unknown as Verdict;
+      },
+      isDone: () => false,
+      initState: () => ({ count: 0, doneAfter: 999 }),
+      serializeState: (s) => s,
+      deserializeState: (o) => o as CountState,
+    };
+
+    await expect(
+      run(domain, {}, makeConfig(), makeInfra(), "test-domain"),
+    ).rejects.toThrow(/unhandled verdict kind/);
+  });
+
   it("does NOT emit pre_publish on non-success exit (budget exhausted)", async () => {
     const domain = countDomain({ tasksToRun: 5 });
     const guard: GateResolver = async (e) => {
