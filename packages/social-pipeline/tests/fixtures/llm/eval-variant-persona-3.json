@@ -1,5 +1,0 @@
-{
-  "text": "{\"understood\": true, \"engagement_likelihood\": 0.74, \"ai_smell_score\": 0.25, \"depth_score\": 0.7, \"comments\": \"Rigor is there. I'd like one more specific anti-pattern but this reads as practitioner-grade.\"}",
-  "cost": { "input_tokens": 400, "output_tokens": 80, "usd": 0.002 },
-  "stop_reason": "end_turn"
-}
