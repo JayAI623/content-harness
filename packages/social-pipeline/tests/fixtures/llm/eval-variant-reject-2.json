@@ -1,0 +1,5 @@
+{
+  "text": "{\"understood\": true, \"engagement_likelihood\": 0.45, \"ai_smell_score\": 0.7, \"depth_score\": 0.35, \"comments\": \"Generic observability advice. Nothing here that I haven't seen in ten other threads.\"}",
+  "cost": { "input_tokens": 400, "output_tokens": 80, "usd": 0.002 },
+  "stop_reason": "end_turn"
+}

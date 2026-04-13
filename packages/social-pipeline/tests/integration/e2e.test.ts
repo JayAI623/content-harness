@@ -114,4 +114,54 @@ describe("social-pipeline MVP v1 end-to-end", () => {
     const events = (await readFile(join(result.run_dir, "events.jsonl"), "utf8")).trim().split("\n");
     expect(events.length).toBeGreaterThanOrEqual(4); // research, draft, refine, eval
   });
+
+  it("rejects a weak variant, revises it, and accepts the revision", async () => {
+    const runRoot = join(workRoot, "runs");
+    const assetRoot = join(workRoot, "asset-pools");
+
+    const twitterFixture = await loadFixture("opencli/twitter-search.json");
+    const draftBase = await loadFixture("llm/draft-base.json");
+    const refine = await loadFixture("llm/refine-variant.json");
+    const reject1 = await loadFixture("llm/eval-variant-reject-1.json");
+    const reject2 = await loadFixture("llm/eval-variant-reject-2.json");
+    const reject3 = await loadFixture("llm/eval-variant-reject-3.json");
+    const revise = await loadFixture("llm/revise.json");
+    const accept1 = await loadFixture("llm/eval-variant-persona-1.json");
+    const accept2 = await loadFixture("llm/eval-variant-persona-2.json");
+    const accept3 = await loadFixture("llm/eval-variant-persona-3.json");
+
+    const llm = fakeLLMClient([draftBase, refine, reject1, reject2, reject3, revise, accept1, accept2, accept3]);
+    const assets = makeFilesystemAssetStore(assetRoot);
+    await assets.append("liu", "evaluator_personas", DEFAULT_EVALUATOR_PERSONAS);
+
+    const infra: InfraBundle = { llm, assets, logger: silentLogger(), clock: systemClock };
+    const domain = makeSocialDomain({
+      opencli: fakeOpencliClient({ [piece.input.intent]: twitterFixture }),
+    });
+
+    const config: RunConfig = {
+      run_id: "e2e-revise",
+      run_root: runRoot,
+      budget: { max_iterations: 30, max_tokens: 300_000, max_usd: 3, max_wall_seconds: 60 },
+      retry: { max_attempts: 2, backoff_ms: 0 },
+      gates: { post_plan: false, pre_publish: false },
+      gate_resolver: autoApproveGateResolver,
+      thresholds: { eval_pass: 0.7, ai_smell_max: 0.3, depth_min: 0.5 },
+      max_revisions: 3,
+    };
+
+    const result = await run(domain, { persona, campaign, piece }, config, infra, "social-pipeline");
+
+    expect(result.ok).toBe(true);
+    const variants = (result.state as any).piece.platform_variants;
+    expect(variants.length).toBe(2); // original (rejected) + revision (accepted)
+    expect(variants[0].status).toBe("rejected");
+    expect(variants[1].status).toBe("accepted");
+    expect(variants[1].revision_count).toBe(1);
+    expect(variants[1].eval_score).toBeGreaterThanOrEqual(0.7);
+    const history = (result.state as any).piece.eval_history;
+    expect(history.length).toBe(2);
+    expect(history[0].verdict).toBe("revise");
+    expect(history[1].verdict).toBe("accept");
+  });
 });

@@ -27,6 +27,8 @@ export interface SocialDomainDeps {
   opencli: OpencliClient;
 }
 
+const MAX_REVISIONS = 3;
+
 let taskCounter = 0;
 const nextId = (prefix: string): string => `${prefix}-${++taskCounter}`;
 
@@ -100,6 +102,51 @@ function buildInitialPlan(state: SocialState): WorkPlan<SocialTaskKind> {
   };
 }
 
+function buildRevisePlan(state: SocialState, rejectedIdx: number): WorkPlan<SocialTaskKind> {
+  // Intentionally do NOT reset taskCounter — replan reuses the counter so IDs remain unique.
+  const variant = state.piece.platform_variants[rejectedIdx]!;
+  const platform = variant.platform;
+  // The revise handler appends the revised variant at the END of platform_variants,
+  // so its index in the resulting array will be the current length.
+  const newVariantIdx = state.piece.platform_variants.length;
+
+  const evaluatorRefs: AssetRef[] = state.persona.audience.evaluator_persona_ids.map((id) => ({
+    kind: "evaluator_persona",
+    id,
+  }));
+
+  const reviseTask: Task<SocialTaskKind> = {
+    id: nextId("revise"),
+    kind: "revise",
+    params: { platform, variant_idx: rejectedIdx },
+    deps: [],
+    input_refs: [],
+    acceptance_criteria: `${platform} variant revised`,
+    gate_before: false,
+    gate_after: false,
+    status: "pending",
+  };
+
+  const evalTask: Task<SocialTaskKind> = {
+    id: nextId("eval_variant"),
+    kind: "eval_variant",
+    params: { platform, variant_idx: newVariantIdx },
+    deps: [reviseTask.id],
+    input_refs: evaluatorRefs,
+    acceptance_criteria: `variant scores >= thresholds`,
+    gate_before: false,
+    gate_after: false,
+    status: "pending",
+  };
+
+  return {
+    plan_id: `plan-${state.piece.id}-revise-${Date.now()}`,
+    piece_id: state.piece.id,
+    tasks: [reviseTask, evalTask],
+    budget_estimate: { tokens: 20_000, usd: 0.2, iterations: 2 },
+  };
+}
+
 export function makeSocialDomain(deps: SocialDomainDeps): HarnessDomain<SocialTaskKind, SocialState> {
   const researchRefs = makeResearchRefsHandler({ opencli: deps.opencli });
   const handlers: Record<SocialTaskKind, TaskHandler<SocialState>> = {
@@ -116,7 +163,15 @@ export function makeSocialDomain(deps: SocialDomainDeps): HarnessDomain<SocialTa
     },
 
     async replan(ctx: PlanContext<SocialState>, _reason: string): Promise<WorkPlan<SocialTaskKind>> {
-      // v1 replan is identical to planInitial — later versions can shrink/expand based on state
+      // If there is a recent rejected variant that still has revision budget, build
+      // a focused revise+eval_variant plan instead of starting from scratch.
+      const variants = ctx.state.piece.platform_variants;
+      for (let i = variants.length - 1; i >= 0; i--) {
+        const v = variants[i]!;
+        if (v.status === "rejected" && v.revision_count < MAX_REVISIONS) {
+          return buildRevisePlan(ctx.state, i);
+        }
+      }
       return buildInitialPlan(ctx.state);
     },
 
@@ -133,14 +188,13 @@ export function makeSocialDomain(deps: SocialDomainDeps): HarnessDomain<SocialTa
       for (const variant of latestByPlatform.values()) {
         if (variant.status === "accepted") continue;
         if (variant.status === "rejected") {
-          const round = [...state.piece.eval_history]
-            .reverse()
-            .find((r) => r.target.kind === "platform_variant" && r.target.platform === variant.platform);
-          const feedback = round?.actionable_feedback.map((a) => `[${a.category}] ${a.text}`).join(" | ") ?? "tighten the draft";
-          if (variant.revision_count >= 3) {
-            return { kind: "redirect", reason: `variant for ${variant.platform} failed after max revisions` };
+          if (variant.revision_count >= MAX_REVISIONS) {
+            return {
+              kind: "abort",
+              reason: `variant for ${variant.platform} failed after ${MAX_REVISIONS} revisions`,
+            };
           }
-          return { kind: "revise", task_id: `refine_variant-for-${variant.platform}`, feedback };
+          return { kind: "redirect", reason: `revise ${variant.platform} variant` };
         }
         allAccepted = false;
       }

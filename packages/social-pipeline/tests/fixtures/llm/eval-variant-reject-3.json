@@ -1,0 +1,5 @@
+{
+  "text": "{\"understood\": true, \"engagement_likelihood\": 0.52, \"ai_smell_score\": 0.68, \"depth_score\": 0.38, \"comments\": \"The bones of a good post are here but the hook is a platitude. Show me the 40-line fix.\"}",
+  "cost": { "input_tokens": 400, "output_tokens": 80, "usd": 0.002 },
+  "stop_reason": "end_turn"
+}
