@@ -12,7 +12,13 @@ import { refineVariantHandler } from "./handlers/refine_variant.js";
 import { evalVariantHandler } from "./handlers/eval_variant.js";
 import { reviseHandler } from "./handlers/revise.js";
 import type { OpencliClient } from "./opencli-client.js";
-import type { Persona, Campaign, Piece, SocialAssetRef } from "./schemas/index.js";
+import type {
+  Persona,
+  Campaign,
+  Piece,
+  PlatformVariant,
+  SocialAssetRef,
+} from "./schemas/index.js";
 import { initSocialState, type SocialState } from "./state.js";
 
 export type SocialTaskKind =
@@ -26,13 +32,55 @@ export interface SocialDomainDeps {
   opencli: OpencliClient;
 }
 
+// Fallback cap used by evaluate() (which doesn't get RunConfig).
+// replan() reads ctx.config.max_revisions instead — configurable per run.
 const MAX_REVISIONS = 3;
 
-let taskCounter = 0;
-const nextId = (prefix: string): string => `${prefix}-${++taskCounter}`;
+interface IdGen {
+  next(prefix: string): string;
+}
 
-function buildInitialPlan(state: SocialState): WorkPlan<SocialTaskKind> {
-  taskCounter = 0;
+function makeIdGen(): IdGen {
+  let counter = 0;
+  return { next: (prefix: string) => `${prefix}-${++counter}` };
+}
+
+interface LatestVariantEntry {
+  idx: number;
+  variant: PlatformVariant;
+}
+
+/**
+ * Build a map from platform → {idx, variant} containing the LATEST variant
+ * for each platform. Since revise appends new variants at the end of
+ * platform_variants, iterating in order and overwriting gives us the latest.
+ */
+function getLatestVariantPerPlatform(state: SocialState): Map<string, LatestVariantEntry> {
+  const map = new Map<string, LatestVariantEntry>();
+  state.piece.platform_variants.forEach((variant, idx) => {
+    map.set(variant.platform, { idx, variant });
+  });
+  return map;
+}
+
+/**
+ * Scan the latest variant per platform. Returns the first one that is
+ * rejected AND still has revision budget. Used by replan() to decide whether
+ * to build a focused revise plan.
+ */
+function findLatestRejectedNeedingRevision(
+  state: SocialState,
+  maxRevisions: number,
+): LatestVariantEntry | null {
+  for (const entry of getLatestVariantPerPlatform(state).values()) {
+    if (entry.variant.status === "rejected" && entry.variant.revision_count < maxRevisions) {
+      return entry;
+    }
+  }
+  return null;
+}
+
+function buildInitialPlan(state: SocialState, ids: IdGen): WorkPlan<SocialTaskKind> {
   const piece = state.piece;
   const primaryPlatforms = state.persona.platforms
     .filter((p) => p.priority > 0 && p.role !== "syndicate")
@@ -46,7 +94,7 @@ function buildInitialPlan(state: SocialState): WorkPlan<SocialTaskKind> {
   }));
 
   const research: Task<SocialTaskKind> = {
-    id: nextId("research_refs"),
+    id: ids.next("research_refs"),
     kind: "research_refs",
     params: { platform, query: piece.input.intent, limit: 15 },
     deps: [],
@@ -58,7 +106,7 @@ function buildInitialPlan(state: SocialState): WorkPlan<SocialTaskKind> {
   };
 
   const draft: Task<SocialTaskKind> = {
-    id: nextId("draft_base"),
+    id: ids.next("draft_base"),
     kind: "draft_base",
     params: {},
     deps: [research.id],
@@ -70,7 +118,7 @@ function buildInitialPlan(state: SocialState): WorkPlan<SocialTaskKind> {
   };
 
   const refine: Task<SocialTaskKind> = {
-    id: nextId("refine_variant"),
+    id: ids.next("refine_variant"),
     kind: "refine_variant",
     params: { platform },
     deps: [draft.id],
@@ -82,7 +130,7 @@ function buildInitialPlan(state: SocialState): WorkPlan<SocialTaskKind> {
   };
 
   const evalTask: Task<SocialTaskKind> = {
-    id: nextId("eval_variant"),
+    id: ids.next("eval_variant"),
     kind: "eval_variant",
     params: { platform, variant_idx: 0 },
     deps: [refine.id],
@@ -101,8 +149,11 @@ function buildInitialPlan(state: SocialState): WorkPlan<SocialTaskKind> {
   };
 }
 
-function buildRevisePlan(state: SocialState, rejectedIdx: number): WorkPlan<SocialTaskKind> {
-  // Intentionally do NOT reset taskCounter — replan reuses the counter so IDs remain unique.
+function buildRevisePlan(
+  state: SocialState,
+  rejectedIdx: number,
+  ids: IdGen,
+): WorkPlan<SocialTaskKind> {
   const variant = state.piece.platform_variants[rejectedIdx]!;
   const platform = variant.platform;
   // The revise handler appends the revised variant at the END of platform_variants,
@@ -115,7 +166,7 @@ function buildRevisePlan(state: SocialState, rejectedIdx: number): WorkPlan<Soci
   }));
 
   const reviseTask: Task<SocialTaskKind> = {
-    id: nextId("revise"),
+    id: ids.next("revise"),
     kind: "revise",
     params: { platform, variant_idx: rejectedIdx },
     deps: [],
@@ -127,7 +178,7 @@ function buildRevisePlan(state: SocialState, rejectedIdx: number): WorkPlan<Soci
   };
 
   const evalTask: Task<SocialTaskKind> = {
-    id: nextId("eval_variant"),
+    id: ids.next("eval_variant"),
     kind: "eval_variant",
     params: { platform, variant_idx: newVariantIdx },
     deps: [reviseTask.id],
@@ -155,23 +206,25 @@ export function makeSocialDomain(deps: SocialDomainDeps): HarnessDomain<SocialTa
     eval_variant: evalVariantHandler,
     revise: reviseHandler,
   };
+  // One IdGen per domain instance — scoped to a single run so task IDs never
+  // collide with entries already written to events.jsonl.
+  const ids = makeIdGen();
 
   return {
     async planInitial(ctx: PlanContext<SocialState>): Promise<WorkPlan<SocialTaskKind>> {
-      return buildInitialPlan(ctx.state);
+      return buildInitialPlan(ctx.state, ids);
     },
 
     async replan(ctx: PlanContext<SocialState>, _reason: string): Promise<WorkPlan<SocialTaskKind>> {
-      // If there is a recent rejected variant that still has revision budget, build
-      // a focused revise+eval_variant plan instead of starting from scratch.
-      const variants = ctx.state.piece.platform_variants;
-      for (let i = variants.length - 1; i >= 0; i--) {
-        const v = variants[i]!;
-        if (v.status === "rejected" && v.revision_count < MAX_REVISIONS) {
-          return buildRevisePlan(ctx.state, i);
-        }
+      // If the latest variant for any platform is rejected and still has
+      // revision budget, build a focused revise+eval_variant plan. Otherwise
+      // fall back to a full initial plan.
+      const maxRevisions = ctx.config.max_revisions ?? MAX_REVISIONS;
+      const rejected = findLatestRejectedNeedingRevision(ctx.state, maxRevisions);
+      if (rejected) {
+        return buildRevisePlan(ctx.state, rejected.idx, ids);
       }
-      return buildInitialPlan(ctx.state);
+      return buildInitialPlan(ctx.state, ids);
     },
 
     handlers,
@@ -180,11 +233,8 @@ export function makeSocialDomain(deps: SocialDomainDeps): HarnessDomain<SocialTa
       const variants = state.piece.platform_variants;
       if (variants.length === 0) return { kind: "continue" };
 
-      const latestByPlatform = new Map<string, (typeof variants)[number]>();
-      variants.forEach((v) => latestByPlatform.set(v.platform, v));
-
       let allAccepted = true;
-      for (const variant of latestByPlatform.values()) {
+      for (const { variant } of getLatestVariantPerPlatform(state).values()) {
         if (variant.status === "accepted") continue;
         if (variant.status === "rejected") {
           if (variant.revision_count >= MAX_REVISIONS) {
@@ -203,9 +253,9 @@ export function makeSocialDomain(deps: SocialDomainDeps): HarnessDomain<SocialTa
     isDone(state: SocialState): boolean {
       const variants = state.piece.platform_variants;
       if (variants.length === 0) return false;
-      const latestByPlatform = new Map<string, (typeof variants)[number]>();
-      variants.forEach((v) => latestByPlatform.set(v.platform, v));
-      return Array.from(latestByPlatform.values()).every((v) => v.status === "accepted");
+      return Array.from(getLatestVariantPerPlatform(state).values()).every(
+        ({ variant }) => variant.status === "accepted",
+      );
     },
 
     initState(input: unknown): SocialState {

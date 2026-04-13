@@ -200,4 +200,43 @@ describe("social domain", () => {
     const plan = await domain.replan({ state, config: stubConfig as any }, "test");
     expect(plan.tasks.length).toBe(4);
   });
+
+  it("replan respects ctx.config.max_revisions", async () => {
+    const domain = makeSocialDomain({ opencli: fakeOpencliClient({}) });
+    const rejectedPiece = {
+      ...piece,
+      platform_variants: [{
+        platform: "twitter",
+        content: "x",
+        constraints_applied: [],
+        inspired_by: [],
+        style_patterns_applied: [],
+        status: "rejected" as const,
+        revision_count: 1,
+      }],
+      eval_history: [{
+        round: 0,
+        target: { kind: "platform_variant" as const, piece_id: "piece1", platform: "twitter", variant_idx: 0 },
+        audience_feedback: [],
+        aggregated_score: 0.5,
+        actionable_feedback: [],
+        verdict: "revise" as const,
+      }],
+    };
+    const state = domain.initState({ persona, campaign, piece: rejectedPiece });
+    // With max_revisions=1 and revision_count=1, replan should fall back to
+    // the full initial plan (4 tasks) because the variant has no budget left.
+    const lowConfig = { ...stubConfig, max_revisions: 1 };
+    const plan = await domain.replan({ state, config: lowConfig as any }, "test");
+    expect(plan.tasks.length).toBe(4);
+  });
+
+  it("task counter is instance-scoped and does not reset across plan builds", async () => {
+    const domain = makeSocialDomain({ opencli: fakeOpencliClient({}) });
+    const state = domain.initState({ persona, campaign, piece });
+    const plan1 = await domain.planInitial({ state, config: stubConfig as any });
+    const plan2 = await domain.planInitial({ state, config: stubConfig as any });
+    const allIds = [...plan1.tasks, ...plan2.tasks].map((t) => t.id);
+    expect(new Set(allIds).size).toBe(allIds.length); // no collisions
+  });
 });
