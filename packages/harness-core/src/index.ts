@@ -10,6 +10,7 @@ export {
   markFailed,
   markRevise,
   markRejected,
+  hasFailed,
 } from "./planner.js";
 export {
   autoApproveGateResolver,

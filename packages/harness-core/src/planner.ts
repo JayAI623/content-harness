@@ -9,6 +9,10 @@ export function selectNextRunnable<TK extends string, S>(plan: WorkPlan<TK>, _st
   return null;
 }
 
+export function hasFailed<TK extends string>(plan: WorkPlan<TK>): Task<TK> | null {
+  return plan.tasks.find((t) => t.status === "failed") ?? null;
+}
+
 function mapTask<TK extends string>(
   plan: WorkPlan<TK>,
   taskId: string,

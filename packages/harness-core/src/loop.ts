@@ -1,7 +1,7 @@
 import { Budget } from "./budget.js";
 import { applyDelta } from "./patch.js";
 import { appendEvent, createRun, snapshot } from "./persistence.js";
-import { markCompleted, markFailed, markRevise, selectNextRunnable, markRejected } from "./planner.js";
+import { hasFailed, markCompleted, markFailed, markRevise, selectNextRunnable, markRejected } from "./planner.js";
 import { runWithRetry } from "./retry.js";
 import type {
   HarnessDomain,
@@ -55,6 +55,16 @@ export async function run<TK extends string, S>(
   while (!domain.isDone(state) && !budget.exhausted()) {
     const task = selectNextRunnable(plan, state);
     if (!task) {
+      const failed = hasFailed(plan);
+      if (failed) {
+        return {
+          ok: false,
+          state,
+          budget: budget.snapshot(),
+          reason: `failed task "${failed.id}" has no recovery path`,
+          run_dir: runDir,
+        };
+      }
       stuckChecks += 1;
       if (stuckChecks > 3) {
         return { ok: false, state, budget: budget.snapshot(), reason: "no runnable task", run_dir: runDir };

@@ -490,6 +490,93 @@ describe("run loop", () => {
     ).rejects.toThrow(/unhandled verdict kind/);
   });
 
+  it("aborts with a failed-task reason when a task failure leaves nothing runnable", async () => {
+    const domain: HarnessDomain<"inc", CountState> = {
+      async planInitial() {
+        return makePlan([
+          {
+            id: "t-root",
+            kind: "boom" as any,
+            params: {},
+            deps: [],
+            input_refs: [],
+            acceptance_criteria: "",
+            gate_before: false,
+            gate_after: false,
+            status: "pending",
+          },
+          {
+            id: "t-dep",
+            kind: "noop" as any,
+            params: {},
+            deps: ["t-root"],
+            input_refs: [],
+            acceptance_criteria: "",
+            gate_before: false,
+            gate_after: false,
+            status: "pending",
+          },
+        ]);
+      },
+      async replan() {
+        // Replan rebuilds the identical plan — pre-fix, this is the livelock.
+        return makePlan([
+          {
+            id: "t-root",
+            kind: "boom" as any,
+            params: {},
+            deps: [],
+            input_refs: [],
+            acceptance_criteria: "",
+            gate_before: false,
+            gate_after: false,
+            status: "pending",
+          },
+          {
+            id: "t-dep",
+            kind: "noop" as any,
+            params: {},
+            deps: ["t-root"],
+            input_refs: [],
+            acceptance_criteria: "",
+            gate_before: false,
+            gate_after: false,
+            status: "pending",
+          },
+        ]);
+      },
+      handlers: {
+        boom: async (): Promise<Delta<CountState>> => ({
+          kind: "failure",
+          patches: [],
+          cost: { input_tokens: 0, output_tokens: 0, usd: 0 },
+          error: { message: "boom", retryable: false },
+        }),
+        noop: async (): Promise<Delta<CountState>> => ({
+          kind: "success",
+          patches: [],
+          cost: { input_tokens: 0, output_tokens: 0, usd: 0 },
+        }),
+      } as any,
+      async evaluate(): Promise<Verdict> { return { kind: "continue" }; },
+      isDone: () => false,
+      initState: () => ({ count: 0, doneAfter: 999 }),
+      serializeState: (s) => s,
+      deserializeState: (o) => o as CountState,
+    };
+
+    const result = await run(
+      domain,
+      {},
+      makeConfig({ budget: { max_iterations: 20 } }),
+      makeInfra(),
+      "test-domain",
+    );
+    expect(result.ok).toBe(false);
+    expect(result.reason).toMatch(/failed task/);
+    expect(result.budget.iterations).toBeLessThan(5);
+  });
+
   it("aborts cleanly when a task kind has no registered handler", async () => {
     const domain: HarnessDomain<"inc", CountState> = {
       async planInitial() {
