@@ -132,8 +132,6 @@ export async function run<TK extends string, S>(
         plan = await domain.replan({ state, config }, verdict.reason);
         break;
       case "done": {
-        await snapshot(runDir, step, { state: domain.serializeState(state), plan, budget: budget.snapshot() });
-        step += 1;
         const rejection = await maybePrePublishReject(state, budget, runDir);
         if (rejection) return rejection;
         return { ok: true, state, budget: budget.snapshot(), run_dir: runDir };
