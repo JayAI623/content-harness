@@ -1,5 +1,6 @@
-import { mkdir, writeFile, readFile, readdir, appendFile } from "node:fs/promises";
+import { mkdir, writeFile, readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
+import { appendLineSynced, writeAtomic } from "./persistence-atomic.js";
 import type { BudgetSnapshot, Delta, Task, Verdict, WorkPlan } from "./types.js";
 
 export interface CreateRunOptions {
@@ -34,32 +35,22 @@ interface SnapshotPayload {
   budget: BudgetSnapshot;
 }
 
-async function nextIndex(dir: string, prefix: string): Promise<number> {
-  const entries = await readdir(dir).catch(() => [] as string[]);
-  const indices = entries
-    .filter((e) => e.startsWith(`${prefix}-`) && e.endsWith(".json"))
-    .map((e) => Number(e.slice(prefix.length + 1, -5)))
-    .filter((n) => Number.isFinite(n));
-  return indices.length === 0 ? 0 : Math.max(...indices) + 1;
-}
-
-export async function snapshot(runDir: string, payload: SnapshotPayload): Promise<void> {
-  const stateIdx = await nextIndex(join(runDir, "state"), "state");
-  await writeFile(
-    join(runDir, "state", `state-${stateIdx}.json`),
+export async function snapshot(
+  runDir: string,
+  step: number,
+  payload: SnapshotPayload,
+): Promise<void> {
+  await writeAtomic(
+    join(runDir, "state", `state-${step}.json`),
     JSON.stringify(payload.state, null, 2) + "\n",
-    "utf8",
   );
-  const planIdx = await nextIndex(join(runDir, "plan"), "plan");
-  await writeFile(
-    join(runDir, "plan", `plan-${planIdx}.json`),
+  await writeAtomic(
+    join(runDir, "plan", `plan-${step}.json`),
     JSON.stringify(payload.plan, null, 2) + "\n",
-    "utf8",
   );
-  await writeFile(
+  await writeAtomic(
     join(runDir, "budget.json"),
     JSON.stringify(payload.budget, null, 2) + "\n",
-    "utf8",
   );
 }
 
@@ -70,7 +61,7 @@ export interface EventEntry {
 }
 
 export async function appendEvent(runDir: string, entry: EventEntry): Promise<void> {
-  await appendFile(join(runDir, "events.jsonl"), JSON.stringify(entry) + "\n", "utf8");
+  await appendLineSynced(join(runDir, "events.jsonl"), JSON.stringify(entry) + "\n");
 }
 
 export async function loadLatestState<S>(runDir: string): Promise<S | null> {

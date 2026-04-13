@@ -34,6 +34,7 @@ export async function run<TK extends string, S>(
   let state = domain.initState(input);
   let plan: WorkPlan<TK> = await domain.planInitial({ state, config });
   const budget = new Budget(config.budget, () => infra.clock.now());
+  let step = 0;
 
   const runDir = await createRun({
     run_root: config.run_root,
@@ -41,7 +42,8 @@ export async function run<TK extends string, S>(
     domain_id: domainId,
     started_at: infra.clock.now(),
   });
-  await snapshot(runDir, { state: domain.serializeState(state), plan, budget: budget.snapshot() });
+  await snapshot(runDir, step, { state: domain.serializeState(state), plan, budget: budget.snapshot() });
+  step += 1;
 
   // Structural gate: post_plan
   if (config.gates.post_plan) {
@@ -109,14 +111,16 @@ export async function run<TK extends string, S>(
       if (decision === "reject") {
         plan = markRevise(plan, task.id, "user rejected at post-task gate");
         await appendEvent(runDir, { task, delta });
-        await snapshot(runDir, { state: domain.serializeState(state), plan, budget: budget.snapshot() });
+        await snapshot(runDir, step, { state: domain.serializeState(state), plan, budget: budget.snapshot() });
+        step += 1;
         continue;
       }
     }
 
     const verdict = await domain.evaluate({ state, config });
     await appendEvent(runDir, { task, delta, verdict });
-    await snapshot(runDir, { state: domain.serializeState(state), plan, budget: budget.snapshot() });
+    await snapshot(runDir, step, { state: domain.serializeState(state), plan, budget: budget.snapshot() });
+    step += 1;
 
     switch (verdict.kind) {
       case "continue":
@@ -128,7 +132,8 @@ export async function run<TK extends string, S>(
         plan = await domain.replan({ state, config }, verdict.reason);
         break;
       case "done": {
-        await snapshot(runDir, { state: domain.serializeState(state), plan, budget: budget.snapshot() });
+        await snapshot(runDir, step, { state: domain.serializeState(state), plan, budget: budget.snapshot() });
+        step += 1;
         const rejection = await maybePrePublishReject(state, budget, runDir);
         if (rejection) return rejection;
         return { ok: true, state, budget: budget.snapshot(), run_dir: runDir };
