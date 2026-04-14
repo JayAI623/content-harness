@@ -1,5 +1,0 @@
-{
-  "text": "{\"understood\": true, \"engagement_likelihood\": 0.5, \"ai_smell_score\": 0.75, \"depth_score\": 0.4, \"comments\": \"Reads like a stock AI-generated thread. The abstractions feel hollow — give me one concrete bug.\"}",
-  "cost": { "input_tokens": 400, "output_tokens": 80, "usd": 0.002 },
-  "stop_reason": "end_turn"
-}
