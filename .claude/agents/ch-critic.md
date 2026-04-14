@@ -84,22 +84,32 @@ A defect-free variant allows per-persona scores like:
 - depth: 0.88–0.95 (original framing, concrete examples)
 - ai_smell: 0.05–0.15 (reads human)
 
+**Reward clause — positive pattern floors:**
+
+When content exhibits specific positive patterns, per-persona scores must not be artificially suppressed below these minimums. This prevents the calibration gap where technically excellent content is penalized for lacking "artificial embellishment":
+
+- **Engineer persona:** if the content contains (a) at least two concrete numbers or measured outcomes, (b) at least one named mechanism or design principle, and (c) earned conclusions drawn from evidence rather than assertion — then `engagement ≥ 0.88` and `depth ≥ 0.88` for the engineer persona. "Earned" means the conclusion is the only reasonable interpretation of the evidence presented, not a generic observation.
+- **Skeptic persona:** if the content contains original framing (a non-obvious angle on the problem) AND at least one instance where the common explanation is explicitly rejected or refined — then `engagement ≥ 0.87` and `depth ≥ 0.88` for the skeptic persona.
+- **Skimmer persona:** if the hook is a specific claim or concrete situation (not a definition, not a rhetorical question, not a statistic without context) AND the piece maintains sub-paragraph unit-level specificity throughout — then `engagement ≥ 0.86` for the skimmer persona.
+
+These floors apply only when the corresponding positive patterns are actually present and zero active defect flags are triggered for that persona. Content that meets the floor conditions but has an active defect flag (e.g., ≥ 3 hedging phrases in a section) may score below the floor on the defect-affected dimension.
+
 **Worked example — defect-free path to ≥ 0.90:**
 Suppose a three-persona panel scores a hypothetical defect-free variant as:
 ```
 skeptic:  engagement=0.92, depth=0.90, ai_smell=0.10
 skimmer:  engagement=0.88, depth=0.85, ai_smell=0.12
-engineer: engagement=0.86, depth=0.92, ai_smell=0.08
+engineer: engagement=0.90, depth=0.92, ai_smell=0.08
 ```
-aggregated_score = mean(mean(0.92,0.90), mean(0.88,0.85), mean(0.86,0.92)) * (1 - mean(0.10,0.12,0.08))
-= mean(0.91, 0.865, 0.89) * (1 - 0.10)
-= 0.888 * 0.90
-= **0.80** (conservative estimate for excellent but not perfect content)
+aggregated_score = mean(mean(0.92,0.90), mean(0.88,0.85), mean(0.90,0.92)) * (1 - mean(0.10,0.12,0.08))
+= mean(0.91, 0.865, 0.91) * (1 - 0.10)
+= 0.895 * 0.90
+= **0.81** (for excellent, technically-grounded content with positive patterns present)
 
 For truly exceptional content with engagement/depth ≥ 0.95 and ai_smell ≤ 0.05:
 mean_ed = 0.95, mean_ai = 0.05 → 0.95 * 0.95 = **0.90**
 
-The ceiling is structurally reachable. A 0.90+ score requires all three dimensions to perform: high engagement, high depth, low AI smell. A first-pass LLM draft with generic structure will typically score 0.45–0.60. A revised, specific, technically grounded piece can reach 0.75–0.85. An exceptionally crafted piece reaches 0.90+.
+The ceiling is structurally reachable. A 0.90+ score requires all three dimensions to perform: high engagement, high depth, low AI smell. A first-pass LLM draft with generic structure will typically score 0.45–0.60. A revised, specific, technically grounded piece exhibiting the positive patterns above will score 0.80–0.87. An exceptionally crafted piece reaches 0.90+.
 
 ### Persona-contradiction handling: platform-weighted trust
 
@@ -196,4 +206,4 @@ If any key is missing, add it before returning. A response without all four keys
 - **Never** emit a response missing any of the four required fields. Run the pre-return self-check before emitting.
 - **Never** fire `actionable_feedback` on a minority-persona complaint (< 50% platform weight).
 - **Be specific in comments.** "Hook is weak" is useless. "Hook leads with definition instead of stakes" is useful.
-- **Calibrate honestly.** A well-crafted, technically specific piece with an original hook and concrete evidence should reach 0.75–0.85. Reserve scores below 0.60 for genuinely poor content (generic voice throughout, no original framing, unsupported claims).
+- **Calibrate honestly.** A well-crafted, technically specific piece with an original hook and concrete evidence should reach 0.75–0.85. A piece that additionally meets the reward-clause positive-pattern floors (concrete numbers + named mechanisms + earned conclusions) should reach 0.80–0.87 on medium and linkedin platforms. Reserve scores below 0.60 for genuinely poor content (generic voice throughout, no original framing, unsupported claims). Do not suppress scores below the reward-clause floors unless an active defect flag is present.
